@@ -8,7 +8,8 @@
     "prepare": "git config core.hooksPath .githooks",
     "test": "node tests/run.cjs",
     "deploy": "node scripts/build.mjs deploy",
-    "release": "node scripts/build.mjs release"
+    "release": "node scripts/build.mjs release",
+    "fixture": "node scripts/fixture.mjs"
   },
   "devDependencies": {
     "fengari": "^0.1.4"

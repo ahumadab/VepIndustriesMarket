@@ -32,7 +32,7 @@ _Avoid_: Enchère, ligne, tier
 _Code_: `tier`
 
 **Résumé journalier**:
-Pour un objet, par jour Auctionator : le prix minimum et le stock maximum vus dans les scans complets du jour, et le nombre de ces scans. Conservé 21 jours.
+Pour un objet, par jour Auctionator : le prix minimum et le stock maximum vus dans les scans complets du jour, le nombre de ces scans et les ventes estimées depuis le scan précédent, avec la durée sur laquelle elles portent. Conservé 21 jours.
 _Avoid_: Daily, agrégat
 _Code_: `daily`
 
@@ -44,7 +44,7 @@ _Avoid_: Trend, évolution
 _Code_: `trend`
 
 **Ventes estimées**:
-Nombre d'unités d'un objet probablement achetées entre deux scans complets, déduit des enchères disparues avant leur expiration.
+Nombre d'unités d'un objet probablement achetées entre deux scans complets, déduit des enchères disparues avant leur expiration, en supposant que les acheteurs prennent les moins chères : on compte les unités disparues par prix unitaire, jusqu'au nouveau prix minimum ; une enchère plus chère qui disparaît est une annulation.
 _Avoid_: Sale rate, ventes, demande
 _Code_: `estimatedSales` (`estimatedSalesPerDay` ramené à un jour)
 
