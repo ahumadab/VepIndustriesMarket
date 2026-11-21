@@ -6,7 +6,7 @@
 ## OptionalDeps: Auctionator
 ## SavedVariables: VepIndustriesMarketDB
 
-Probe.lua
 Trend.lua
 Market.lua
+Capture.lua
 UI.lua

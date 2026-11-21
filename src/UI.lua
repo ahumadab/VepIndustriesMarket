@@ -232,7 +232,17 @@ ev:SetScript("OnEvent", function()
     if ui and ui.shown then f:Show() end
 end)
 
-local probe = SlashCmdList.VEPINDUSTRIESMARKET
+local function status()
+    local s = M.Status()
+    if not s then
+        GM.Say("Aucun Scan complet enregistré : ouvre l'hôtel des ventes (Auctionator en mode replicate).")
+        return
+    end
+    GM.Say(string.format("Dernier Scan complet : %s, %d objets, %d Ko de données.", date("%d/%m %H:%M", s.time),
+        s.items, math.floor(s.bytes / 1024 + 0.5)))
+end
+
+SLASH_VEPINDUSTRIESMARKET1 = "/vim"
 SlashCmdList.VEPINDUSTRIESMARKET = function(arg)
     local cmd, rest = (arg or ""):match("^(%S*)%s*(.-)$")
     cmd = cmd:lower()
@@ -242,17 +252,16 @@ SlashCmdList.VEPINDUSTRIESMARKET = function(arg)
         local id = tonumber(rest:match("item:(%d+)") or rest)
         if id then
             pinned = id; GM.ToggleWindow(true); GM.ShowItem(id, true)
-        else print("|cff33ff99VepIndustries Market|r /vim item <lien>") end
+        else GM.Say("/vim item <lien>") end
     elseif cmd == "unpin" then
-        pinned = nil; print("|cff33ff99VepIndustries Market|r fenêtre de nouveau liée au survol.")
+        pinned = nil; GM.Say("fenêtre de nouveau liée au survol.")
     elseif cmd == "tooltip" then
         VepIndustriesMarketDB.tooltip = VepIndustriesMarketDB.tooltip == false
-        print("|cff33ff99VepIndustries Market|r ligne d'infobulle " ..
+        GM.Say("ligne d'infobulle " ..
         (VepIndustriesMarketDB.tooltip and "activée" or "désactivée"))
-    elseif cmd == "scan" or cmd == "grab" then
-        probe(arg)
+    elseif cmd == "status" then
+        status()
     else
-        print(
-        "|cff33ff99VepIndustries Market|r /vim (fenêtre) | /vim item <lien> | /vim unpin | /vim tooltip | /vim scan")
+        GM.Say("/vim (fenêtre) | /vim item <lien> | /vim unpin | /vim tooltip | /vim status")
     end
 end
