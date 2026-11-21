@@ -54,9 +54,10 @@ local function byPrice(a, b)
     return a.timeLeft < b.timeLeft
 end
 
--- Full scan: { [itemID] = { { price (unit, integer copper), size, count, timeLeft }, ... } } taken at time `now`.
+-- Full scan: { [itemID] = { { price (unit, integer copper), size, count, timeLeft }, ... } } taken at time `now`
+-- on the auction house of `realm` and `faction` (one per faction: scans to compare must share both).
 -- Replaces the stored full scan and adds it to the daily summary (lowest price, highest stock of the day).
-function M.Ingest(scan, now)
+function M.Ingest(scan, now, realm, faction)
     local db, day = VepIndustriesMarketDB, T.Today(now)
     if not db or not day then return end
     local items, daily = {}, db.daily or {}
@@ -81,11 +82,11 @@ function M.Ingest(scan, now)
         end
         if next(days) == nil then daily[id] = nil end
     end
-    db.fullScan = { time = now, items = items }
+    db.fullScan = { time = now, realm = realm, faction = faction, items = items }
     db.daily = daily
 end
 
--- { time, items, bytes } of the stored full scan (bytes: rough size on disk, daily summary included), nil without one
+-- { time, realm, faction, items, bytes } of the stored full scan (bytes: rough size on disk, daily summary included), nil without one
 function M.Status()
     local fs = VepIndustriesMarketDB and VepIndustriesMarketDB.fullScan
     if not fs then return nil end
@@ -95,7 +96,7 @@ function M.Status()
         bytes = bytes + 16
         for _, v in pairs(days) do bytes = bytes + #v + 14 end
     end
-    return { time = fs.time, items = items, bytes = bytes }
+    return { time = fs.time, realm = fs.realm, faction = fs.faction, items = items, bytes = bytes }
 end
 
 -- { verdict, trend = { price, stock, days, age }, estimatedSalesPerDay, confidence, history, today, tiers, daily }

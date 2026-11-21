@@ -21,12 +21,15 @@ time = function() return DAY0 + TODAY * 86400 + 3600 end
 dofile("fixtures/realdata.lua")
 dofile("fixtures/fullscan.lua")
 LISTENERS = {}
+AUCTIONATOR_CONFIG = { replicate_scan_3 = true, autoscan_2 = true }
 Auctionator = {
   Constants = { SCAN_DAY_0 = DAY0 },
   Database = { GetPriceHistory = function(self, key) return FAKE[key] or DATA[key] or {} end },
   EventBus = { Register = function(_, l, events) for _, e in ipairs(events) do LISTENERS[e] = l end end },
   FullScan = { Events = { ScanComplete = "replicate_scan_complete" } },
   IncrementalScan = { Events = { ScanComplete = "full_incremental_scan_complete" } },
+  Config = { Options = { REPLICATE_SCAN = "replicate_scan_3", AUTOSCAN = "autoscan_2" },
+    Get = function(name) return AUCTIONATOR_CONFIG[name] end },
 }
 
 dofile("../src/Trend.lua")
@@ -185,7 +188,7 @@ ok(okWin, "fenetre + commandes " .. tostring(e3))
 fire("ADDON_LOADED", "VepIndustriesMarket")
 fire("PLAYER_LOGIN")
 local full, incremental = LISTENERS["replicate_scan_complete"], LISTENERS["full_incremental_scan_complete"]
-ok(full and incremental, "branche sur les scans d'Auctionator")
+ok(full and incremental and not lastSaid():find("réglé"), "branche sur les scans d'Auctionator, bien regle")
 SlashCmdList.VEPINDUSTRIESMARKET("status")
 ok(lastSaid():find("Aucun Scan complet"), "/vim status sans scan : " .. lastSaid())
 
@@ -218,6 +221,7 @@ end
 ok(mixed[1] == 28 and mixed[3] == 108 and mixed[4] == 25 and not mixed[2], "palier reel separe par temps restant")
 local st = M.Status()
 local fullSize = st.bytes * FULLSCAN_TOTAL_ITEMS / FULLSCAN_ITEMS
+ok(st.realm == "PvE" and st.faction == "Horde", "scan rattache au royaume et a la faction")
 ok(st.items == FULLSCAN_ITEMS and fullSize < 1e6,
   string.format("%d objets, %d Ko extrapoles a %d objets", st.items, math.floor(fullSize / 1000), FULLSCAN_TOTAL_ITEMS))
 SlashCmdList.VEPINDUSTRIESMARKET("status")
@@ -227,7 +231,12 @@ ok(lastSaid():find(FULLSCAN_ITEMS .. " objets"), "/vim status : " .. lastSaid())
 local before = #said
 incremental:ReceiveEvent("full_incremental_scan_complete", {})
 incremental:ReceiveEvent("full_incremental_scan_complete", {})
-ok(#said == before + 1 and lastSaid():find("replicate"), "scan incremental : un seul avertissement")
+ok(#said == before + 1 and lastSaid():find("incrémental"), "scan incremental : un seul avertissement")
+
+-- Auctionator without autoscan or replicate mode: told at login
+AUCTIONATOR_CONFIG.autoscan_2 = false
+fire("PLAYER_LOGIN")
+ok(lastSaid():find("pas réglé") and lastSaid():find("Run autoscan"), "Auctionator mal regle : prevenu a la connexion")
 
 -- Auctionator not loaded
 Auctionator = nil

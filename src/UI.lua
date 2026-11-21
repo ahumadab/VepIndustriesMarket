@@ -238,8 +238,8 @@ local function status()
         GM.Say("Aucun Scan complet enregistré : ouvre l'hôtel des ventes (Auctionator en mode replicate).")
         return
     end
-    GM.Say(string.format("Dernier Scan complet : %s, %d objets, %d Ko de données.", date("%d/%m %H:%M", s.time),
-        s.items, math.floor(s.bytes / 1024 + 0.5)))
+    GM.Say(string.format("Dernier Scan complet : %s (%s), %d objets, %d Ko de données.", date("%d/%m %H:%M", s.time),
+        tostring(s.faction), s.items, math.floor(s.bytes / 1024 + 0.5)))
 end
 
 SLASH_VEPINDUSTRIESMARKET1 = "/vim"

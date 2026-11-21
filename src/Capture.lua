@@ -36,19 +36,20 @@ local function toFullScan(data)
     return scan
 end
 
-local warned = false
+local SETUP = "les Ventes estimées demandent un Scan complet à l'ouverture de l'hôtel des ventes. Dans les options "
+    .. "d'Auctionator, coche « Run autoscan when Auction House is opened » et, dans Advanced, « Use alternate slower "
+    .. "scan mode by default »."
+local warned = false -- incremental scans: once per session
 local listener = {}
 function listener:ReceiveEvent(event, data)
     if event ~= Auctionator.FullScan.Events.ScanComplete then
-        if not warned then
-            warned = true
-            GM.Say("Auctionator a fait un scan incrémental : les Ventes estimées demandent le mode replicate (options "
-                .. "Advanced d'Auctionator, « Use alternate slower scan mode by default »).")
-        end
+        if not warned then GM.Say("Auctionator a fait un scan incrémental : " .. SETUP) end
+        warned = true
         return
     end
     -- ponytail: whole scan in one frame (~300k auctions), batch it over frames if the hitch shows in game
-    local ok, e = pcall(M.Ingest, toFullScan(type(data) == "table" and data or {}), time())
+    local ok, e = pcall(M.Ingest, toFullScan(type(data) == "table" and data or {}), time(), GetRealmName(),
+        UnitFactionGroup("player"))
     if not ok then logErr("scan", e) end
 end
 
@@ -69,6 +70,10 @@ f:SetScript("OnEvent", function(_, event, arg)
             end
             local ok, e = pcall(A.EventBus.Register, A.EventBus, listener, events)
             if not ok then logErr("auctionator", e) end
+            local c = A.Config
+            if c and c.Get and c.Options and not (c.Get(c.Options.REPLICATE_SCAN) and c.Get(c.Options.AUTOSCAN)) then
+                GM.Say("Auctionator n'est pas réglé pour les Scans complets : " .. SETUP)
+            end
         else
             GM.Say("Auctionator absent : ni Tendance ni Ventes estimées.")
         end
