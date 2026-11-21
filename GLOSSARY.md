@@ -20,6 +20,10 @@ _Avoid_: Disponible, available, quantité
 Prix unitaire d'achat immédiat le plus bas pour un objet à un instant donné.
 _Avoid_: Prix, buyout
 
+**Palier**:
+Dans un scan complet, l'ensemble des enchères d'un objet au même prix unitaire et à la même taille de lot. Les enchères n'ayant pas d'identifiant, c'est la plus petite unité qu'on peut suivre d'un scan à l'autre.
+_Avoid_: Enchère, ligne, tier
+
 ## Analyse
 
 **Tendance**:
