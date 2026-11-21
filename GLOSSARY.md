@@ -44,7 +44,7 @@ _Avoid_: Trend, évolution
 _Code_: `trend`
 
 **Ventes estimées**:
-Nombre d'unités d'un objet probablement achetées entre deux scans complets, déduit des enchères disparues avant leur expiration, en supposant que les acheteurs prennent les moins chères : une enchère plus chère que le nouveau prix minimum qui disparaît est une annulation.
+Nombre d'unités d'un objet probablement achetées entre deux scans complets, déduit des enchères disparues avant leur expiration, en supposant que les acheteurs prennent les moins chères : on compte les unités disparues par prix unitaire, jusqu'au nouveau prix minimum ; une enchère plus chère qui disparaît est une annulation.
 _Avoid_: Sale rate, ventes, demande
 _Code_: `estimatedSales` (`estimatedSalesPerDay` ramené à un jour)
 

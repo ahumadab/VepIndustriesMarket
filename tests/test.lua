@@ -129,6 +129,7 @@ M.Ingest({
   [918] = { tier(100, 1, 5, 3) },                     -- reposted cheaper
   [919] = { tier(100, 1, 2, 3), tier(120, 1, 3, 3) }, -- dearer tier cancelled
   [920] = { tier(100, 1, 2, 3), tier(110, 1, 3, 3) }, -- cheapest tier bought out
+  [921] = { tier(1, 1038, 1, 3), tier(1, 200, 2, 3) }, -- commodity: a partial buy shrinks the lot
 }, t0, "PvE", "Horde")
 M.Ingest({
   [910] = { tier(100, 1, 1, 3) },
@@ -138,6 +139,7 @@ M.Ingest({
   [918] = { tier(95, 1, 5, 4) },
   [919] = { tier(100, 1, 1, 3) },
   [920] = { tier(110, 1, 1, 3) },
+  [921] = { tier(1, 838, 1, 3), tier(1, 200, 2, 3) },
 }, t0 + 3600, "PvE", "Horde")
 local function rate(id) return M.Report(id).estimatedSalesPerDay end
 ok(near(rate(910), 2 * 24), "palier partiellement vendu : 4 disparues dont 2 Short -> 2 vendues en 1 h")
@@ -150,6 +152,7 @@ ok(rate(915) == nil and M.Report(915).confidence == nil, "objet nouveau : pas de
 ok(rate(918) == 0, "remis en vente moins cher : aucune vente")
 ok(near(rate(919), 1 * 24), "palier plus cher disparu : annule, pas vendu")
 ok(near(rate(920), 4 * 24), "acheteurs du moins cher : palier vide + baisse au nouveau minimum")
+ok(near(rate(921), 200 * 24), "marchandise : unites comptees par prix, quelle que soit la taille du lot")
 ok(M.Report(910).confidence == "low", "1 jour de comparaison (jour ancien sans ventes ignore) -> non fiable")
 local t2 = time() - 3600 -- today 00:00
 M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 2, 2) } }, t2, "PvE", "Horde")
@@ -168,6 +171,31 @@ M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, t3 + 3600, "PvE", "Horde")
 M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, t3 + 4000, "PvE", "Alliance")
 ok(near(rate(910), 36), "autre faction : pas comparee")
 ok(rate(999999) == nil and M.Report(999999).confidence == nil, "objet sans scan complet : pas de ventes, sans erreur")
+
+-- two real full scans of 2026-11-21 (one item in ten), compared as if 1 h apart (Short and Medium may expire);
+-- expected units from an independent count over the fixture rows
+dofile("fixtures/fullscan-later.lua")
+local function rowsToScan(rows)
+  local scan = {}
+  for _, r in ipairs(rows) do
+    scan[r[1]] = scan[r[1]] or {}
+    table.insert(scan[r[1]], tier(math.floor(r[3] / r[2] + 0.5), r[2], r[5], r[4]))
+  end
+  return scan
+end
+VepIndustriesMarketDB = {}
+M.Ingest(rowsToScan(FULLSCAN), FULLSCAN_LATER_TIME - 3600, "PvE", "Horde")
+M.Ingest(rowsToScan(FULLSCAN_LATER), FULLSCAN_LATER_TIME, "PvE", "Horde")
+local units, selling = 0, 0
+for id in pairs(rowsToScan(FULLSCAN)) do
+  local u = (rate(id) or 0) / 24
+  units, selling = units + u, selling + (u > 0 and 1 or 0)
+end
+local function unitsOf(id) return math.floor(rate(id) / 24 + 0.5) end
+ok(math.floor(units + 0.5) == 7165 and selling == 147 and unitsOf(2512) == 0 and unitsOf(5479) == 368
+  and unitsOf(3858) == 1022 and unitsOf(11083) == 863,
+  string.format("scans reels : %d unites vendues sur %d objets (fleches grossieres 2512 : %d, stock en hausse)",
+    math.floor(units + 0.5), selling, unitsOf(2512)))
 
 -- real data: same verdicts as before the Market module
 local count, n = {}, 0
