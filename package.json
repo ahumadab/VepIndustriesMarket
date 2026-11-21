@@ -9,7 +9,8 @@
     "test": "node tests/run.cjs",
     "deploy": "node scripts/build.mjs deploy",
     "release": "node scripts/build.mjs release",
-    "fixture": "node scripts/fixture.mjs"
+    "fixture": "node scripts/saved.mjs fixture",
+    "report": "node scripts/saved.mjs report"
   },
   "devDependencies": {
     "fengari": "^0.1.4"

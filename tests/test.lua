@@ -174,8 +174,8 @@ ok(rate(999999) == nil and M.Report(999999).confidence == nil, "objet sans scan 
 
 -- real full scans of 2026-11-21 (one item in ten, npm run fixture), compared in pairs; expected units from an
 -- independent count over the fixture rows
-dofile("fixtures/fullscan-2023.lua")
-dofile("fixtures/fullscan-2039.lua")
+dofile("fixtures/fullscan-1121-2023.lua")
+dofile("fixtures/fullscan-1121-2039.lua")
 local function rowsToScan(rows)
   local scan = {}
   for _, r in ipairs(rows) do
@@ -196,13 +196,13 @@ local function realPair(before, after, t1, t2, ids)
   return total, selling, of
 end
 -- the first scan's time is unknown: compared as if 1 h apart (Short and Medium may expire)
-local total, selling, of = realPair(FULLSCAN, FULLSCAN_2023, FULLSCAN_2023_TIME - 3600, FULLSCAN_2023_TIME,
+local total, selling, of = realPair(FULLSCAN, FULLSCAN_1121_2023, FULLSCAN_1121_2023_TIME - 3600, FULLSCAN_1121_2023_TIME,
   { 2512, 5479, 3858, 11083 })
 ok(total == 7165 and selling == 147 and of[1] == 0 and of[2] == 368 and of[3] == 1022 and of[4] == 863,
   string.format("scans reels, 1 h : %d unites vendues sur %d objets (fleches grossieres 2512 : %d, stock en hausse)",
     total, selling, of[1]))
 -- consecutive autoscans 919 s apart (Short only may expire)
-total, selling, of = realPair(FULLSCAN_2023, FULLSCAN_2039, FULLSCAN_2023_TIME, FULLSCAN_2039_TIME, { 2512, 4306 })
+total, selling, of = realPair(FULLSCAN_1121_2023, FULLSCAN_1121_2039, FULLSCAN_1121_2023_TIME, FULLSCAN_1121_2039_TIME, { 2512, 4306 })
 ok(total == 4227 and selling == 110 and of[1] == 0 and of[2] == 1315,
   string.format("scans reels consecutifs, 919 s : %d unites vendues sur %d objets", total, selling))
 
