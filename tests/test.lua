@@ -59,15 +59,22 @@ ok(r.verdict == "demand" and near(r.trend.stock, -0.5) and near(r.trend.price, 0
   "calcul relatif")
 ok(report({ { 2512, 100, 10 }, { 2513, 1, 10 }, { 2515, 100, 10 }, { 2516, 100, 10 } }).verdict == "stable",
   "enchere aberrante neutralisee par la mediane")
-ok(r.salesPerDay == nil and r.confidence == nil, "pas de ventes estimees sans scan complet")
+ok(r.estimatedSalesPerDay == nil and r.confidence == nil, "pas de ventes estimees sans scan complet")
 
 -- item missing from the history
 local okMiss, miss = pcall(M.Report, 999999)
 ok(okMiss and miss.verdict == "none" and miss.trend.days == 0 and #miss.history == 0, "objet absent -> none")
 
+-- Auctionator not loaded
+local auctionator = Auctionator
+Auctionator = nil
+local okNoAuc, noAuc = pcall(M.Report, 14048)
+ok(okNoAuc and noAuc.verdict == "none" and #noAuc.history == 0, "sans Auctionator -> none sans erreur")
+Auctionator = auctionator
+
 -- a full scan is accepted but not used yet
 local okIngest = pcall(M.Ingest, { [14048] = { { price = 100, size = 1, count = 3, timeLeft = 2 } } }, time())
-ok(okIngest and M.Report(14048).salesPerDay == nil, "Ingest accepte un scan complet")
+ok(okIngest and M.Report(14048).estimatedSalesPerDay == nil, "Ingest accepte un scan complet")
 
 -- real data: same verdicts as before the Market module
 local count, n = {}, 0

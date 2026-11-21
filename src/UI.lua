@@ -22,14 +22,14 @@ end
 
 -- r: a Market.Report
 function GM.TrendText(r)
-    local v, t = r.verdict, r.trend
+    local v, trend = r.verdict, r.trend
     local txt = hex(COLOR[v]) .. LABEL[v] .. "|r"
     if v ~= "none" then
-        txt = txt .. "  prix " .. pct(t.price) .. "  stock " .. pct(t.stock, true)
-    elseif t.age and t.age > M.WINDOW then
-        txt = hex(COLOR.none) .. "Données vieilles de " .. t.age .. " j|r"
+        txt = txt .. "  prix " .. pct(trend.price) .. "  stock " .. pct(trend.stock, true)
+    elseif trend.age and trend.age > M.WINDOW then
+        txt = hex(COLOR.none) .. "Données vieilles de " .. trend.age .. " j|r"
     end
-    return txt .. string.format(" |cff9d9d9d(%d j)|r", t.days or 0)
+    return txt .. string.format(" |cff9d9d9d(%d j)|r", trend.days or 0)
 end
 
 ---------------------------------------------------------------- window

@@ -10,7 +10,7 @@ M.WINDOW = T.WINDOW
 -- Accepted but unused until estimated sales are computed.
 function M.Ingest(scan, now) end
 
--- { verdict, trend = { price, stock, days, age }, salesPerDay, confidence, history, today }
+-- { verdict, trend = { price, stock, days, age }, estimatedSalesPerDay, confidence, history, today }
 -- price/stock: relative change of the latest day vs the median of the window; history: ascending { day, price, stock }
 function M.Report(itemID)
     local hist = T.History(itemID) or {}
