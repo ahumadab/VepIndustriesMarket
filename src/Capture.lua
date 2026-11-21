@@ -79,7 +79,7 @@ function GM.Reread()
     local AH = C_AuctionHouse
     local n = AH and AH.GetNumReplicateItems and AH.GetNumReplicateItems() or 0
     if n < 1 then
-        return GM.Say("aucun Scan complet en mémoire : ouvre l'hôtel des ventes après un scan d'Auctionator.")
+        return GM.Say("aucun Scan complet en mémoire (il est perdu à chaque /reload) : ouvre l'hôtel des ventes et attends un scan d'Auctionator.")
     end
     ingest(n, function(k) -- the replicate API is 0-based
         return { AH.GetReplicateItemInfo(k - 1) }, AH.GetReplicateItemTimeLeft(k - 1)
