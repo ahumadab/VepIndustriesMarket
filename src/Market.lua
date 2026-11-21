@@ -48,6 +48,13 @@ local function readDay(v)
     return tonumber(p), tonumber(s), tonumber(n)
 end
 
+-- Inside a coroutine (the capture spreading a big scan over frames), hand control back; no-op otherwise.
+-- Lua 5.1: running() is nil on the main thread; 5.3 (tests): it returns the main thread and true.
+local function pause()
+    local co, main = coroutine.running()
+    if co and not main then coroutine.yield() end
+end
+
 local function byPrice(a, b)
     if a.price ~= b.price then return a.price < b.price end
     if a.size ~= b.size then return a.size < b.size end
@@ -60,8 +67,10 @@ end
 function M.Ingest(scan, now, realm, faction)
     local db, day = VepIndustriesMarketDB, T.Today(now)
     if not db or not day then return end
-    local items, daily = {}, db.daily or {}
+    local items, daily, done = {}, db.daily or {}, 0
     for id, tiers in pairs(scan) do
+        done = done + 1
+        if done % 200 == 0 then pause() end
         if tiers[1] then
             table.sort(tiers, byPrice)
             local tokens, stock = {}, 0

@@ -200,8 +200,24 @@ for _, r in ipairs(FULLSCAN) do
       timeLeft = r[4] }
   end
 end
+-- one game frame per queued timer, to see the scan spread over frames
+local nextFrame = {}
+C_Timer = { After = function(_, fn) nextFrame[#nextFrame + 1] = fn end }
+local function runFrames()
+  local n = 0
+  while #nextFrame > 0 do
+    n = n + 1
+    table.remove(nextFrame, 1)()
+  end
+  return n
+end
 local okScan, e4 = pcall(full.ReceiveEvent, full, "replicate_scan_complete", data)
-ok(okScan, "scan complet reel ingere " .. tostring(e4))
+local early = M.Status()
+full:ReceiveEvent("replicate_scan_complete", data)
+local busy = lastSaid()
+local spread = runFrames()
+ok(okScan and not early and busy:find("déjà en cours") and spread > #data / 2000,
+  string.format("scan complet reel ingere sur %d images %s", spread, tostring(e4)))
 local checked = { -- itemID = tiers, price, stock, cheapest tier (price, size, count, timeLeft), counted by hand in the raw scan
   [5500] = { 389, 811, 1517, { 811, 1, 3, 3 } },
   [4306] = { 401, 194, 21599, { 194, 20, 1, 2 } },
@@ -233,7 +249,7 @@ C_AuctionHouse = {
   GetReplicateItemInfo = function(i) return table.unpack(data[i + 1].replicateInfo, 1, 17) end,
   GetReplicateItemTimeLeft = function(i) return data[i + 1].timeLeft end,
 }
-SlashCmdList.VEPINDUSTRIESMARKET("relire")
+SlashCmdList.VEPINDUSTRIESMARKET("relire"); runFrames()
 local again = M.Report(5500)
 ok(lastSaid():find(FULLSCAN_ITEMS .. " objets") and #again.tiers == 389 and again.daily[TODAY].scans == 2
   and again.daily[TODAY].stock == 1517, "/vim relire : scan en memoire enregistre, 2 scans dans la journee")

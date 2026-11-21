@@ -15,11 +15,14 @@ end
 -- replicateInfo[3] = lot size, [10] = buyout of the whole lot, [17] = itemID. Bid-only auctions (no buyout) are skipped.
 -- timeLeft is kept as the API gives it: 1 (Short) to 4 (Very long) on Forever over the real scan of 2026-11-21.
 -- A tier is split by time left, so that estimated sales can tell its Short auctions apart.
-local function toFullScan(data)
+-- get(k) -> replicateInfo, timeLeft of auction k (1..n). Pauses every BATCH auctions (see ingest).
+local BATCH = 2000
+local function toFullScan(n, get)
     local scan, byKey = {}, {}
-    for _, a in ipairs(data) do
-        local info = a.replicateInfo
-        local id, size, buyout, timeLeft = info[17], info[3], info[10], a.timeLeft or 0
+    for k = 1, n do
+        local info, timeLeft = get(k)
+        timeLeft = timeLeft or 0
+        local id, size, buyout = info[17], info[3], info[10]
         if id and size and size > 0 and buyout and buyout > 0 then
             local price = math.floor(buyout / size + 0.5)
             local key = id .. ":" .. price .. ":" .. size .. ":" .. timeLeft
@@ -32,6 +35,7 @@ local function toFullScan(data)
             end
             t.count = t.count + 1
         end
+        if k % BATCH == 0 then coroutine.yield() end
     end
     return scan
 end
@@ -39,18 +43,31 @@ end
 local SETUP = "les Ventes estimées demandent un Scan complet à l'ouverture de l'hôtel des ventes. Dans les options "
     .. "d'Auctionator, coche « Run autoscan when Auction House is opened » et, dans Advanced, « Use alternate slower "
     .. "scan mode by default »."
--- ponytail: whole scan in one frame (~300k auctions), batch it over frames if the hitch shows in game
-local function ingest(data)
-    local ok, e = pcall(M.Ingest, toFullScan(data), time(), GetRealmName(), UnitFactionGroup("player"))
-    if not ok then return logErr("scan", e) end
-    GM.Say(string.format("Scan complet enregistré : %d objets (/reload pour sauvegarder).", M.Status().items))
+
+-- A full scan (~300k auctions) freezes the game for seconds in one go: conversion and Market.Ingest run in a
+-- coroutine resumed once per frame, both yielding every few thousand auctions or hundred items.
+local running
+local function ingest(n, get)
+    if running then return GM.Say("un Scan complet est déjà en cours d'enregistrement.") end
+    running = coroutine.create(function()
+        M.Ingest(toFullScan(n, get), time(), GetRealmName(), UnitFactionGroup("player"))
+        GM.Say(string.format("Scan complet enregistré : %d objets (/reload pour sauvegarder).", M.Status().items))
+    end)
+    local function step()
+        local ok, e = coroutine.resume(running)
+        if ok and coroutine.status(running) ~= "dead" then return C_Timer.After(0, step) end
+        running = nil
+        if not ok then logErr("scan", e) end
+    end
+    step()
 end
 
 local warned = false -- incremental scans: once per session
 local listener = {}
 function listener:ReceiveEvent(event, data)
     if event == Auctionator.FullScan.Events.ScanComplete then
-        ingest(type(data) == "table" and data or {})
+        data = type(data) == "table" and data or {}
+        ingest(#data, function(k) return data[k].replicateInfo, data[k].timeLeft end)
     elseif not warned then
         warned = true
         GM.Say("Auctionator a fait un scan incrémental : " .. SETUP)
@@ -64,11 +81,9 @@ function GM.Reread()
     if n < 1 then
         return GM.Say("aucun Scan complet en mémoire : ouvre l'hôtel des ventes après un scan d'Auctionator.")
     end
-    local data = {}
-    for i = 0, n - 1 do -- the replicate API is 0-based
-        data[i + 1] = { replicateInfo = { AH.GetReplicateItemInfo(i) }, timeLeft = AH.GetReplicateItemTimeLeft(i) }
-    end
-    ingest(data)
+    ingest(n, function(k) -- the replicate API is 0-based
+        return { AH.GetReplicateItemInfo(k - 1) }, AH.GetReplicateItemTimeLeft(k - 1)
+    end)
 end
 
 local f = CreateFrame("Frame")
