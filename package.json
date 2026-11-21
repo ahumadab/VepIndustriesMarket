@@ -5,6 +5,7 @@
   "description": "VepIndustries Market - WoW Forever addon: auction house price/stock trends",
   "type": "module",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "test": "node tests/run.cjs",
     "deploy": "node scripts/build.mjs deploy",
     "release": "node scripts/build.mjs release"
