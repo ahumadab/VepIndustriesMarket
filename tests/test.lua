@@ -212,11 +212,12 @@ local function runFrames()
   return n
 end
 local okScan, e4 = pcall(full.ReceiveEvent, full, "replicate_scan_complete", data)
-local early = M.Status()
+local early, started = M.Status(), lastSaid()
 full:ReceiveEvent("replicate_scan_complete", data)
 local busy = lastSaid()
 local spread = runFrames()
-ok(okScan and not early and busy:find("déjà en cours") and spread > #data / 2000,
+ok(okScan and not early and started:find("en cours %(" .. #data .. " enchères%)") and busy:find("déjà en cours")
+  and spread > #data / 2000,
   string.format("scan complet reel ingere sur %d images %s", spread, tostring(e4)))
 local checked = { -- itemID = tiers, price, stock, cheapest tier (price, size, count, timeLeft), counted by hand in the raw scan
   [5500] = { 389, 811, 1517, { 811, 1, 3, 3 } },
