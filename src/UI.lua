@@ -10,6 +10,7 @@ local COLOR = {
     saturated = { 1.00, 0.35, 0.35 },
     none = { 0.60, 0.60, 0.60 },
 }
+local STOCK, SALES = { 0.45, 0.70, 1.00 }, { 0.30, 0.90, 0.40 }
 local function hex(c) return string.format("|cff%02x%02x%02x", math.floor(c[1] * 255), math.floor(c[2] * 255),
         math.floor(c[3] * 255)) end
 -- invert: for stock, more is bad for a seller (red)
@@ -90,13 +91,13 @@ local maxPFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); ma
     "TOPLEFT", 0, 2)
 local maxSFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); maxSFS:SetPoint("BOTTOMRIGHT", graph,
     "TOPRIGHT", 0, 2)
-maxSFS:SetTextColor(0.45, 0.70, 1)
-local maxVFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); maxVFS:SetPoint("BOTTOM", graph, "TOP", 0, 2)
-maxVFS:SetTextColor(0.30, 0.90, 0.40)
+maxSFS:SetTextColor(STOCK[1], STOCK[2], STOCK[3])
+local maxSalesFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+maxSalesFS:SetPoint("BOTTOM", graph, "TOP", 0, 2); maxSalesFS:SetTextColor(SALES[1], SALES[2], SALES[3])
 local legendFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 legendFS:SetPoint("TOP", graph, "BOTTOM", 0, -16)
-legendFS:SetText("|cffffd100Prix minimum|r   |cff74b4ffStock|r   |cff4de666Ventes estimées / jour|r   "
-    .. "|cff9d9d9d(grisées : pas fiables)|r")
+legendFS:SetText("|cffffd100Prix minimum|r   " .. hex(STOCK) .. "Stock|r   " .. hex(SALES) .. "Ventes estimées|r   "
+    .. hex(COLOR.none) .. "(gris : pas fiables)|r")
 local d0FS = graph:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"); d0FS:SetPoint("TOPLEFT", graph, "BOTTOMLEFT",
     0, -2)
 local d1FS = graph:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"); d1FS:SetPoint("TOPRIGHT", graph,
@@ -104,16 +105,16 @@ local d1FS = graph:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"); d1F
 d1FS:SetText("aujourd'hui")
 local emptyFS = graph:CreateFontString(nil, "OVERLAY", "GameFontDisable"); emptyFS:SetPoint("CENTER")
 
-local bars, sales, lines, dots = {}, {}, {}, {}
+local bars, salesBars, lines, dots = {}, {}, {}, {}
 local function bar(i)
     if not bars[i] then
-        bars[i] = graph:CreateTexture(nil, "ARTWORK"); bars[i]:SetColorTexture(0.25, 0.55, 1, 0.45)
+        bars[i] = graph:CreateTexture(nil, "ARTWORK"); bars[i]:SetColorTexture(STOCK[1], STOCK[2], STOCK[3], 0.45)
     end
     return bars[i]
 end
 local function salesBar(i)
-    sales[i] = sales[i] or graph:CreateTexture(nil, "ARTWORK")
-    return sales[i]
+    if not salesBars[i] then salesBars[i] = graph:CreateTexture(nil, "ARTWORK") end
+    return salesBars[i]
 end
 local function line(i)
     if not lines[i] then
@@ -129,7 +130,7 @@ local function dot(i)
 end
 local function hideAll()
     for _, t in ipairs(bars) do t:Hide() end
-    for _, t in ipairs(sales) do t:Hide() end
+    for _, t in ipairs(salesBars) do t:Hide() end
     for _, t in ipairs(lines) do t:Hide() end
     for _, t in ipairs(dots) do t:Hide() end
 end
@@ -159,7 +160,7 @@ function GM.ShowItem(itemID, force)
     if #hist == 0 or not today then
         verdictFS:SetText(hex(COLOR.none) .. "Aucune donnée Auctionator pour cet objet.|r")
         emptyFS:SetText("Fais un Full Scan à l'hôtel des ventes"); emptyFS:Show()
-        maxPFS:SetText(""); maxSFS:SetText(""); maxVFS:SetText(""); d0FS:SetText("")
+        maxPFS:SetText(""); maxSFS:SetText(""); maxSalesFS:SetText(""); d0FS:SetText("")
         return
     end
     emptyFS:Hide()
@@ -178,28 +179,26 @@ function GM.ShowItem(itemID, force)
             if e.stock then maxS = math.max(maxS, e.stock) end
         end
     end
-    -- estimated sales of each compared day, brought to one day
-    local perDay, maxV = {}, 0
+    local compared, maxSales = {}, 0 -- days with estimated sales
     for day, d in pairs(r.daily) do
-        if day >= first and d.seconds > 0 then
-            perDay[day] = d.estimatedSales * 86400 / d.seconds
-            maxV = math.max(maxV, perDay[day])
+        if day >= first and day <= today and d.estimatedSalesPerDay then
+            compared[day] = d
+            maxSales = math.max(maxSales, d.estimatedSalesPerDay)
         end
     end
     d0FS:SetText("il y a " .. (SPAN - 1) .. " j")
     maxPFS:SetText(maxP > 0 and ("max " .. money(maxP)) or "")
     maxSFS:SetText(maxS > 0 and ("stock max " .. maxS) or "")
-    maxVFS:SetText(next(perDay) and ("ventes max " .. perDayText(maxV) .. "/j") or "")
+    maxSalesFS:SetText(next(compared) and ("max " .. perDayText(maxSales) .. "/j") or "")
     local bw = W / SPAN
     local half = math.max(1, (bw - 2) / 2) -- stock bar on the left of the day, estimated sales on the right
-    local vi = 0
-    for day, v in pairs(perDay) do
-        vi = vi + 1
-        local b = salesBar(vi)
-        if r.confidence == "high" then b:SetColorTexture(0.30, 0.90, 0.40, 0.70) else
-            b:SetColorTexture(0.60, 0.60, 0.60, 0.45) end
+    local si = 0
+    for day, d in pairs(compared) do
+        si = si + 1
+        local b, c = salesBar(si), d.reliable and SALES or COLOR.none
+        b:SetColorTexture(c[1], c[2], c[3], d.reliable and 0.70 or 0.45)
         b:ClearAllPoints(); b:SetPoint("BOTTOMLEFT", graph, "BOTTOMLEFT", (day - first) * bw + 1 + half, 0)
-        b:SetSize(half, math.max(1, maxV > 0 and v / maxV * H or 0)); b:Show()
+        b:SetSize(half, math.max(1, maxSales > 0 and d.estimatedSalesPerDay / maxSales * H or 0)); b:Show()
     end
     local function px(day) return (day - first) * bw + bw / 2 end
     -- price axis starts at 0 so a small move does not look like a crash/explosion
