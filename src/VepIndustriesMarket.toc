@@ -8,4 +8,5 @@
 
 Probe.lua
 Trend.lua
+Market.lua
 UI.lua

@@ -73,8 +73,3 @@ function T.Compute(hist, today, window)
     r.verdict = T.Verdict(r.price, r.stock)
     return r
 end
-
-function T.ForItem(itemID)
-    local hist = T.History(itemID)
-    return T.Compute(hist, T.Today()), hist
-end
