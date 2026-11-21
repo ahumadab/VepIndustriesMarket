@@ -1,7 +1,7 @@
 -- Real full scan stored at 2026-11-21T19:23:55.000Z, reduced to the items of fullscan.lua
 -- (npm run fixture). Same rows: { itemID, count (lot size), buyout (whole lot, copper), timeLeft, auctions }
-FULLSCAN_LATER_TIME = 1795289035
-FULLSCAN_LATER = {
+FULLSCAN_2023_TIME = 1795289035
+FULLSCAN_2023 = {
 {255731,1,28887,2,1},
 {255731,1,28887,3,5},
 {255731,1,28888,3,2},

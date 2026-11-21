@@ -1,4 +1,4 @@
-// npm run fixture : writes the full scan stored in the game's SavedVariables to tests/fixtures/fullscan-later.lua,
+// npm run fixture : writes the full scan stored in the game's SavedVariables to tests/fixtures/fullscan-<HHMM>.lua,
 // reduced to the items of tests/fixtures/fullscan.lua, so that tests compare two real scans.
 // Game folder: env WOW_ADDONS, as for deploy; the first account holding VepIndustriesMarket.lua is read.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -29,8 +29,12 @@ for (const [, id, tiers] of scan.matchAll(/\[(\d+)\] = "([^"]*)"/g)) {
     rows.push(`{${id},${lot},${price * lot},${tl},${count ? parseInt(count, 36) : 1}}`);
   }
 }
-writeFileSync(join(root, 'tests/fixtures/fullscan-later.lua'),
-  `-- Real full scan stored at ${new Date(time * 1000).toISOString()}, reduced to the items of fullscan.lua\n`
+// named by the scan's local time (HHMM): fullscan-2039.lua holds FULLSCAN_2039 and FULLSCAN_2039_TIME
+const at = new Date(time * 1000);
+const hhmm = String(at.getHours()).padStart(2, '0') + String(at.getMinutes()).padStart(2, '0');
+const file = `tests/fixtures/fullscan-${hhmm}.lua`;
+writeFileSync(join(root, file),
+  `-- Real full scan stored at ${at.toISOString()}, reduced to the items of fullscan.lua\n`
   + '-- (npm run fixture). Same rows: { itemID, count (lot size), buyout (whole lot, copper), timeLeft, auctions }\n'
-  + `FULLSCAN_LATER_TIME = ${time}\nFULLSCAN_LATER = {\n${rows.join(',\n')},\n}\n`);
-console.log(`✓ ${rows.length} paliers de ${new Set(rows.map((r) => r.split(',')[0])).size} objets -> tests/fixtures/fullscan-later.lua`);
+  + `FULLSCAN_${hhmm}_TIME = ${time}\nFULLSCAN_${hhmm} = {\n${rows.join(',\n')},\n}\n`);
+console.log(`✓ ${rows.length} paliers de ${new Set(rows.map((r) => r.split(',')[0])).size} objets -> ${file}`);

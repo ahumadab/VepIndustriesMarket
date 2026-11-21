@@ -22,7 +22,7 @@ Les tests ne prouvent pas le rendu en jeu : vérifier avec `/reload` après chaq
 ## Structure
 
 - `src/` : l'addon tel qu'il est copié dans le jeu (`@version@` remplacé dans le `.toc`)
-- `tests/` : `test.lua`, `fixtures/realdata.lua` (historique Auctionator réel exporté), `fixtures/fullscan.lua` (un objet sur dix du Scan complet réel du 21/11), `fixtures/fullscan-later.lua` (les mêmes objets dans un Scan complet plus récent, extrait des SavedVariables par `npm run fixture`)
+- `tests/` : `test.lua`, `fixtures/realdata.lua` (historique Auctionator réel exporté), `fixtures/fullscan.lua` (un objet sur dix du Scan complet réel du 21/11), `fixtures/fullscan-<HHMM>.lua` (les mêmes objets dans des Scans complets plus récents, nommés par leur heure, extraits des SavedVariables par `npm run fixture`)
 - `scripts/build.mjs` : deploy / release
 
 Git : gitflow, voir `docs/agents/git-workflow.md`.
