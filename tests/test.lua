@@ -243,9 +243,20 @@ GetCoinTextureString = function(c) return tostring(c) .. "c" end
 GetRealmName = function() return "PvE" end
 UnitFactionGroup = function() return "Horde" end
 hooksecurefunc = function() end
-local frames = {}
+local frames, textures = {}, {}
+-- texture double recording its color, height and visibility, to count the bars drawn
+local function texture()
+  local t = stub("texture")
+  t.SetColorTexture = function(self, r, g, b, a) self.color = string.format("%.2f %.2f %.2f %.2f", r, g, b, a or 1) end
+  t.SetSize = function(self, w, h) self.height = h end
+  t.Show = function(self) self.shown = true end
+  t.Hide = function(self) self.shown = false end
+  textures[#textures + 1] = t
+  return t
+end
 CreateFrame = function(kind, name)
   local f = stub(name or kind)
+  f.CreateTexture = texture
   local shown = false
   f.IsShown = function() return shown end
   f.Show = function() shown = true end
@@ -298,6 +309,37 @@ local okWin, e3 = pcall(function()
   SlashCmdList.VEPINDUSTRIESMARKET("tooltip"); SlashCmdList.VEPINDUSTRIESMARKET("tooltip")
 end)
 ok(okWin, "fenetre + commandes " .. tostring(e3))
+
+-- /vim window: one estimated sales bar per compared day, from the real scan pairs replayed on earlier days
+local SALES, GREY = "0.30 0.90 0.40 0.70", "0.60 0.60 0.60 0.45"
+local function salesBars(id)
+  VepIndustriesMarket.ShowItem(id, true)
+  local n = { [SALES] = 0, [GREY] = 0 }
+  for _, t in ipairs(textures) do
+    if t.shown and n[t.color] then n[t.color] = n[t.color] + 1 end
+  end
+  return n[SALES], n[GREY]
+end
+local function dayAt(day, s) return DAY0 + day * 86400 + s end
+VepIndustriesMarketDB = {}
+local okBars, e6 = pcall(function()
+  -- 3 days ago: consecutive autoscans 919 s apart
+  M.Ingest(rowsToScan(FULLSCAN_1121_2023), dayAt(TODAY - 3, 72000), "PvE", "Horde")
+  M.Ingest(rowsToScan(FULLSCAN_1121_2039), dayAt(TODAY - 3, 72919), "PvE", "Horde")
+end)
+local lone = { salesBars(4306) }
+local okBars2 = pcall(function()
+  -- yesterday: the first real scan, then the second one an hour later
+  M.Ingest(rowsToScan(FULLSCAN), dayAt(TODAY - 1, 72000), "PvE", "Horde")
+  M.Ingest(rowsToScan(FULLSCAN_1121_2023), dayAt(TODAY - 1, 75600), "PvE", "Horde")
+end)
+local two, none = { salesBars(4306) }, { salesBars(14048) }
+ok(okBars and okBars2 and lone[1] == 0 and lone[2] == 1, string.format(
+  "fenetre : 1 jour de ventes estimees, non fiable -> 1 barre grisee (%d, %d) %s", lone[1], lone[2], tostring(e6)))
+ok(two[1] == 2 and two[2] == 0 and M.Report(4306).confidence == "high",
+  string.format("fenetre : 2 jours de ventes estimees reelles, fiables -> 2 barres (%d, %d)", two[1], two[2]))
+ok(none[1] == 0 and none[2] == 0, "fenetre : objet sans ventes estimees -> aucune barre")
+VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily = nil, nil
 
 -- Auctionator adapter, with API doubles
 fire("ADDON_LOADED", "VepIndustriesMarket")
