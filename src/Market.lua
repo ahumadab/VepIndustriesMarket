@@ -7,7 +7,8 @@ GM.Market = GM.Market or {}
 local M = GM.Market
 
 M.WINDOW = T.WINDOW
-local KEEP_DAYS = 21 -- daily summary kept, the span of the /vim window
+-- daily summary kept, the span of the /vim window: ~170 KB per day of scans, ~4.4 MB in all after 21 days (accepted)
+local KEEP_DAYS = 21
 
 -- A tier (one per price, lot size and time left) is one token "<timeLeft><price>[.<size>][*<count>]", numbers in
 -- base 36, size and count omitted when 1, price as the gap from the previous tier of the item (sorted by price),
