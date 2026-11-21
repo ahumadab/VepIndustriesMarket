@@ -3,7 +3,7 @@
 Addon WoW Forever (interface 16001) par VepIndustries : tendance prix/stock des objets de l'hôtel des ventes, à partir de l'historique d'Auctionator.
 Chaque Scan complet d'Auctionator (mode replicate) est enregistré en forme compacte (dernier scan + résumé par objet et par jour, ~1 Mo).
 
-- Infobulle : `Tendance 7 j  Demande | Stable | Saturé  prix ±x %  stock ±y %  (n j)  ≈ N/jour` (ventes estimées sur 7 jours, grisées tant qu'elles ne portent pas sur 2 jours, soit au moins 3 Scans complets)
+- Infobulle : `Tendance 7 j  Demande | Stable | Saturé  prix ±x %  stock ±y %  (n j)  ≈ N/jour` (ventes estimées sur 7 jours entre Scans complets à moins de 2 h d'écart, grisées tant qu'elles ne portent pas sur 2 jours, soit au moins 3 Scans complets)
 - `/vim` : fenêtre graphique 21 jours (prix = ligne, stock = barres). `/vim item <lien>`, `/vim unpin`, `/vim tooltip`, `/vim status` (dernier Scan complet), `/vim relire` (développement : réenregistre le dernier Scan complet gardé en mémoire par le client, sans attendre les 15 min du serveur ; la mémoire est perdue à chaque `/reload`).
 
 ## Développement

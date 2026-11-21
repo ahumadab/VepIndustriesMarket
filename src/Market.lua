@@ -64,23 +64,27 @@ local function addDay(daily, id, day, price, stock, sales, seconds)
         .. (secs > 0 and string.format(" %d %d", units, secs) or "")
 end
 
-local SHORT = 1 -- time left band of auctions about to expire
+-- least time left of each band (1 Short, 2 Medium, 3 Long, 4 Very long), in seconds: retail's values, assumed on
+-- Forever. An auction of a band whose least time left is below the gap between two scans may have expired meanwhile.
+local BAND_MIN = { 0, 1800, 7200, 43200 }
 -- scans closer than this are the same data read again (the server allows one every 15 min): not compared
 local MIN_GAP = 600
+-- scans further apart than this are not compared: Long auctions could expire in between and pass for sold
+local MAX_GAP = 7200
 
--- Units bought between two scans of an item: per tier (price, lot size, any time left), the auctions gone beyond
--- those that were Short, which count as expired. Cancellations and reposts are accepted noise.
-local function estimatedSales(before, after)
+-- Units bought over `gap` seconds between two scans of an item: per tier (price, lot size, any time left), the
+-- auctions gone beyond those that may have expired. Cancellations and reposts are accepted noise.
+local function estimatedSales(before, after, gap)
     local left, groups, units = {}, {}, 0
     local function key(t) return t.price .. ":" .. t.size end
     for _, t in ipairs(after) do left[key(t)] = (left[key(t)] or 0) + t.count end
     for _, t in ipairs(before) do
-        local g = groups[key(t)] or { size = t.size, count = 0, short = 0 }
+        local g = groups[key(t)] or { size = t.size, count = 0, expired = 0 }
         groups[key(t)] = g
         g.count = g.count + t.count
-        if t.timeLeft == SHORT then g.short = g.short + t.count end
+        if (BAND_MIN[t.timeLeft] or 0) < gap then g.expired = g.expired + t.count end
     end
-    for k, g in pairs(groups) do units = units + math.max(0, g.count - (left[k] or 0) - g.short) * g.size end
+    for k, g in pairs(groups) do units = units + math.max(0, g.count - (left[k] or 0) - g.expired) * g.size end
     return units
 end
 
@@ -106,9 +110,9 @@ end
 -- Full scan: { [itemID] = { { price (unit, integer copper), size, count, timeLeft }, ... } } taken at time `now`
 -- on the auction house of `realm` and `faction` (one per faction: scans to compare must share both).
 -- Replaces the stored full scan and adds it to the daily summary (lowest price, highest stock of the day, and the
--- estimated sales since the stored scan when it is from the same auction house). A scan without any auction is
--- ignored; one less than MIN_GAP newer, or holding the same data (/vim relire), is not compared and keeps the
--- stored scan's time, so that the next comparison spans the real time.
+-- estimated sales since the stored scan when it is from the same auction house, at most MAX_GAP older). A scan
+-- without any auction is ignored; one less than MIN_GAP newer, or holding the same data (/vim relire), is not
+-- compared and keeps the stored scan's time, so that the next comparison spans the real time.
 function M.Ingest(scan, now, realm, faction)
     local db, day = VepIndustriesMarketDB, T.Today(now)
     if not db or not day then return end
@@ -130,6 +134,7 @@ function M.Ingest(scan, now, realm, faction)
     local prev, daily = db.fullScan, db.daily or {}
     local gap = prev and prev.realm == realm and prev.faction == faction and now - prev.time
     if gap and (gap < MIN_GAP or sameItems(prev.items, items)) then now, gap = prev.time, nil end
+    if gap and gap > MAX_GAP then gap = nil end
     local before = gap and prev.items or {}
     done = 0
     for id in pairs(items) do
@@ -137,10 +142,10 @@ function M.Ingest(scan, now, realm, faction)
         if done % 200 == 0 then pause() end
         local tiers = scan[id]
         addDay(daily, id, day, tiers[1].price, stocks[id],
-            before[id] and estimatedSales(decode(before[id]), tiers), gap)
+            before[id] and estimatedSales(decode(before[id]), tiers, gap), gap)
     end
-    for id, encoded in pairs(before) do
-        if not items[id] then addDay(daily, id, day, nil, 0, estimatedSales(decode(encoded), {}), gap) end -- sold out
+    for id, encoded in pairs(before) do -- sold out
+        if not items[id] then addDay(daily, id, day, nil, 0, estimatedSales(decode(encoded), {}, gap), gap) end
     end
     for id, days in pairs(daily) do
         for d in pairs(days) do

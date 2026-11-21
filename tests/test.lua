@@ -115,41 +115,49 @@ ok(status.items == 1 and status.time == time() + 30 * 86400 and status.bytes > 0
 VepIndustriesMarketDB = nil
 ok(#M.Report(900).tiers == 0 and M.Status() == nil, "sans donnees sauvegardees -> rien, sans erreur")
 
--- estimated sales: auctions gone from a tier (price, lot size) between two scans, those Short before excepted
+-- estimated sales: auctions gone from a tier (price, lot size) between two scans, except those that may have
+-- expired meanwhile (Short; Medium, 30 min to 2 h left, after 30 min)
 VepIndustriesMarketDB = { daily = { [910] = { [TODAY - 3] = "100 5 4" } } } -- a day saved before estimated sales
 local t0 = time() - 86400 -- yesterday 01:00
 M.Ingest({
   [910] = { tier(100, 1, 3, 3), tier(100, 1, 2, 1) }, -- 5 auctions, 2 of them Short
   [911] = { tier(200, 20, 2, 1) },                    -- Short only
   [912] = { tier(100, 1, 1, 3) },
-  [913] = { tier(50, 5, 2, 2) },                      -- 2 lots of 5, sold out next scan
+  [913] = { tier(50, 5, 2, 3) },                      -- 2 lots of 5, sold out next scan
   [914] = { tier(100, 1, 2, 4), tier(100, 1, 1, 3) }, -- time left moves down between scans
+  [916] = { tier(100, 1, 2, 2) },                     -- Medium
 }, t0, "PvE", "Horde")
 M.Ingest({
   [910] = { tier(100, 1, 1, 3) },
   [912] = { tier(100, 1, 1, 3), tier(90, 1, 4, 4) },
   [914] = { tier(100, 1, 2, 3) },
   [915] = { tier(10, 1, 9, 4) },
-}, t0 + 6 * 3600, "PvE", "Horde")
+}, t0 + 3600, "PvE", "Horde")
 local function rate(id) return M.Report(id).estimatedSalesPerDay end
-ok(near(rate(910), 2 * 4), "palier partiellement vendu : 4 disparues dont 2 Short -> 2 vendues en 6 h")
+ok(near(rate(910), 2 * 24), "palier partiellement vendu : 4 disparues dont 2 Short -> 2 vendues en 1 h")
 ok(rate(911) == 0, "encheres Short disparues : expirees, pas vendues")
+ok(rate(916) == 0, "encheres Medium disparues en plus de 30 min : expirees, pas vendues")
 ok(rate(912) == 0, "nouveau palier : aucune vente")
-ok(near(rate(913), 10 * 4), "objet epuise : ses lots disparus comptent")
-ok(near(rate(914), 1 * 4), "palier suivi malgre le changement de temps restant")
+ok(near(rate(913), 10 * 24), "objet epuise : ses lots disparus comptent")
+ok(near(rate(914), 1 * 24), "palier suivi malgre le changement de temps restant")
 ok(rate(915) == nil and M.Report(915).confidence == nil, "objet nouveau : pas de ventes")
 ok(M.Report(910).confidence == "low", "1 jour de comparaison (jour ancien sans ventes ignore) -> non fiable")
-M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, time(), "PvE", "Horde")
-ok(near(rate(910), 2) and M.Report(910).confidence == "high", "2 jours, 3 scans : 2 vendues en 24 h, fiable")
-M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, time() + 1800, "PvE", "Horde")
-ok(near(rate(910), 2) and M.Status().time == time(), "meme scan relu : pas compare, garde son heure")
-M.Ingest({}, time() + 2000, "PvE", "Horde")
-ok(M.Status().items == 1, "scan vide ignore")
-M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, time() + 60, "PvE", "Horde")
-ok(near(rate(910), 2) and M.Status().time == time(), "scans tres rapproches : pas compares")
-M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, time() + 3600, "PvE", "Horde")
-M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, time() + 7200, "PvE", "Alliance")
-ok(near(rate(910), 2), "autre faction : pas comparee")
+local t2 = time() - 3600 -- today 00:00
+M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 2, 2) } }, t2, "PvE", "Horde")
+ok(near(rate(910), 48) and rate(917) == nil, "plus de 2 h d'ecart : pas compare")
+local t3 = t2 + 1200
+M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3, "PvE", "Horde")
+ok(near(rate(917), 72), "enchere Medium disparue en 20 min : vendue")
+ok(near(rate(910), 36) and M.Report(910).confidence == "high", "2 jours, 3 scans compares : 2 vendues en 80 min, fiable")
+M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3 + 1800, "PvE", "Horde")
+ok(near(rate(910), 36) and M.Status().time == t3, "meme scan relu : pas compare, garde son heure")
+M.Ingest({}, t3 + 2000, "PvE", "Horde")
+ok(M.Status().items == 2, "scan vide ignore")
+M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, t3 + 60, "PvE", "Horde")
+ok(near(rate(910), 36) and M.Status().time == t3, "scans tres rapproches : pas compares")
+M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, t3 + 3600, "PvE", "Horde")
+M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, t3 + 4000, "PvE", "Alliance")
+ok(near(rate(910), 36), "autre faction : pas comparee")
 ok(rate(999999) == nil and M.Report(999999).confidence == nil, "objet sans scan complet : pas de ventes, sans erreur")
 
 -- real data: same verdicts as before the Market module
@@ -224,16 +232,16 @@ ok(okTip and lines[1] == "|cffffd100Tendance 7 j|r || |cffff5959Saturé|r  prix 
 local okNone = pcall(postCall, tip, { id = 999999 })
 ok(okNone and #lines == 1, "pas de ligne infobulle pour un objet absent")
 M.Ingest({ [4338] = { tier(100, 1, 9, 3) } }, t0, "PvE", "Horde")
-M.Ingest({ [4338] = { tier(100, 1, 6, 3) } }, t0 + 6 * 3600, "PvE", "Horde")
+M.Ingest({ [4338] = { tier(100, 1, 6, 3) } }, t0 + 3600, "PvE", "Horde")
 postCall(tip, { id = 4338 })
-ok(lines[2]:find("|cff9d9d9d≈ 12/jour|r", 1, true), "infobulle : ventes estimees grisees sous le seuil " .. lines[2])
-M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [998] = { tier(1, 1, 1, 3) } }, time(), "PvE", "Horde")
+ok(lines[2]:find("|cff9d9d9d≈ 72/jour|r", 1, true), "infobulle : ventes estimees grisees sous le seuil " .. lines[2])
+M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [997] = { tier(1, 1, 1, 3) } }, t2, "PvE", "Horde")
+M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [998] = { tier(1, 1, 1, 3) } }, t3, "PvE", "Horde")
 postCall(tip, { id = 4338 })
-ok(lines[3]:find("|cffffffff≈ 3/jour|r", 1, true), "infobulle : ventes estimees fiables " .. lines[3])
-M.Ingest({ [4338] = { tier(100, 1, 4, 3) } }, time() + 86400, "PvE", "Horde") -- 5 sold in 48 h
-postCall(tip, { id = 4338 })
-ok(lines[4]:find("≈ 2,5/jour", 1, true), "infobulle : decimale sous 10/jour " .. lines[4])
+ok(lines[3]:find("|cffffffff≈ 54/jour|r", 1, true), "infobulle : ventes estimees fiables " .. lines[3])
 VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily = nil, nil
+local slow = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 2.5 })
+ok(slow:find("≈ 2,5/jour", 1, true), "infobulle : decimale sous 10/jour " .. slow)
 local okWin, e3 = pcall(function()
   SlashCmdList.VEPINDUSTRIESMARKET("")
   VepIndustriesMarket.ShowItem(14048, true)
