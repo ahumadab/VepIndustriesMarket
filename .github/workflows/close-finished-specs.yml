@@ -1,0 +1,45 @@
+name: Close finished specs
+
+# GitHub never closes a parent issue on its own: a spec closes once its last ticket does.
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  close-parent:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          # Read right after the close, the API can still give no parent or a stale sub-issue list for a few seconds,
+          # and it answers a 502 at times.
+          retry() {
+            for attempt in 1 2 3 4 5; do
+              "$@" && return
+              sleep 5
+            done
+            return 1
+          }
+          # A 404 is the lag or a ticket without a spec: only the retries tell them apart.
+          for attempt in 1 2 3 4 5; do
+            parent=$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/parent" --jq '.number' 2> error) && break
+            parent=
+            sleep 5
+          done
+          if [ -z "$parent" ]; then
+            grep -q 'HTTP 404' error || { cat error; exit 1; }
+            echo "#$ISSUE has no spec."
+            exit 0
+          fi
+          state=$(retry gh api "repos/$GITHUB_REPOSITORY/issues/$parent" --jq '.state')
+          [ "$state" = open ] || { echo "The spec of #$ISSUE is already closed."; exit 0; }
+          # The sub-issue list may still show this ticket open: it closed, since its close triggered this run.
+          open_tickets=$(retry gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$parent/sub_issues" \
+            --jq ".[] | select(.state == \"open\" and .number != $ISSUE) | \"#\(.number)\"")
+          [ -z "$open_tickets" ] || { echo "#$parent keeps open tickets:" $open_tickets; exit 0; }
+          retry gh issue close "$parent" --repo "$GITHUB_REPOSITORY" --reason completed --comment "All its tickets are closed."
