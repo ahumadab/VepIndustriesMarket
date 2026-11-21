@@ -13,6 +13,10 @@ Addon World of Warcraft (serveur WoW Forever, interface 16001, API moderne `C_Au
 
 ## Agent skills
 
+### Git workflow
+
+Gitflow : `main` (versions taguées), `develop` (intégration, par défaut), `feature/<n>-<slug>` par ticket, `release/X.Y.Z`, `hotfix/X.Y.Z`. See `docs/agents/git-workflow.md`.
+
 ### Issue tracker
 
 Les tickets vivent dans les GitHub Issues de `ahumadab/VepIndustriesMarket` (CLI `gh`). See `docs/agents/issue-tracker.md`.

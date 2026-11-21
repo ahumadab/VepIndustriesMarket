@@ -22,6 +22,8 @@ try { execSync('node tests/run.cjs', { cwd: root, stdio: 'inherit' }); } catch {
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 let version = pkg.version;
 if (mode === 'release') {
+  const branch = sh('git rev-parse --abbrev-ref HEAD');
+  if (branch !== 'main') fail(`release : uniquement sur main (gitflow), branche actuelle ${branch}`);
   if (sh('git status --porcelain')) fail('release : commit tes changements d\'abord');
   if (sh(`git tag -l v${version}`)) fail(`release : le tag v${version} existe déjà, monte la version dans package.json`);
 } else {

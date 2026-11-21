@@ -11,7 +11,7 @@ Addon WoW Forever (interface 16001) par VepIndustries : tendance prix/stock des 
 npm install
 npm test          # logique + smoke test UI (Fengari + doublures de l'API WoW)
 npm run deploy    # tests -> copie dans AddOns/VepIndustriesMarket (version x.y.z-dev+sha)
-npm run release   # idem + zip dans dist/ + tag git vX.Y.Z (arbre git propre requis)
+npm run release   # sur main uniquement : idem + zip dans dist/ + tag git vX.Y.Z
 ```
 
 Dossier du jeu : variable `WOW_ADDONS`, par défaut `C:/Program Files (x86)/World of Warcraft/_forever_/Interface/AddOns`.
@@ -23,3 +23,5 @@ Les tests ne prouvent pas le rendu en jeu : vérifier avec `/reload` après chaq
 - `src/` : l'addon tel qu'il est copié dans le jeu (`@version@` remplacé dans le `.toc`)
 - `tests/` : `test.lua`, `fixtures/realdata.lua` (historique Auctionator réel exporté)
 - `scripts/build.mjs` : deploy / release
+
+Git : gitflow, voir `docs/agents/git-workflow.md`.
