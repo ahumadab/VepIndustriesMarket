@@ -1,6 +1,6 @@
 -- VepIndustriesMarket UI: trend line in item tooltips + a small window with price (line) and stock (bars) over the history.
 local GM = VepIndustriesMarket
-local T = GM.Trend
+local M = GM.Market
 
 local LABEL = { demand = "Demande", stable = "Stable", saturated = "Saturé", none = "Pas assez de données" }
 local COLOR = {
@@ -20,16 +20,16 @@ local function pct(x, invert)
     return string.format("%s%+d%%|r", c, v)
 end
 
+-- r: a Market.Report
 function GM.TrendText(r)
-    if not r then return nil end
-    local v = r.verdict
+    local v, t = r.verdict, r.trend
     local txt = hex(COLOR[v]) .. LABEL[v] .. "|r"
     if v ~= "none" then
-        txt = txt .. "  prix " .. pct(r.price) .. "  stock " .. pct(r.stock, true)
-    elseif r.age and r.age > T.WINDOW then
-        txt = hex(COLOR.none) .. "Données vieilles de " .. r.age .. " j|r"
+        txt = txt .. "  prix " .. pct(t.price) .. "  stock " .. pct(t.stock, true)
+    elseif t.age and t.age > M.WINDOW then
+        txt = hex(COLOR.none) .. "Données vieilles de " .. t.age .. " j|r"
     end
-    return txt .. string.format(" |cff9d9d9d(%d j)|r", r.days or 0)
+    return txt .. string.format(" |cff9d9d9d(%d j)|r", t.days or 0)
 end
 
 ---------------------------------------------------------------- window
@@ -129,10 +129,10 @@ function GM.ShowItem(itemID, force)
     current = itemID
     local name = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(itemID) or ("item " .. itemID)
     nameFS:SetText((name or "?") .. (pinned and " |cff9d9d9d(figé)|r" or ""))
-    local today = T.Today()
-    local r, hist = T.ForItem(itemID)
+    local r = M.Report(itemID)
+    local hist, today = r.history, r.today
     hideAll()
-    if not hist or #hist == 0 or not today then
+    if #hist == 0 or not today then
         verdictFS:SetText(hex(COLOR.none) .. "Aucune donnée Auctionator pour cet objet.|r")
         emptyFS:SetText("Fais un Full Scan à l'hôtel des ventes"); emptyFS:Show()
         maxPFS:SetText(""); maxSFS:SetText(""); d0FS:SetText("")
@@ -140,7 +140,7 @@ function GM.ShowItem(itemID, force)
     end
     emptyFS:Hide()
     local last = hist[#hist]
-    verdictFS:SetText((GM.TrendText(r) or "") .. "\n|cffffffffMin actuel|r " .. money(last.price) ..
+    verdictFS:SetText(GM.TrendText(r) .. "\n|cffffffffMin actuel|r " .. money(last.price) ..
         "  |cff74b4ffstock|r " .. (last.stock or "?"))
 
     local first = today - SPAN + 1
@@ -197,9 +197,9 @@ end
 local function onItemTooltip(tooltip, itemID)
     if not itemID or not tooltip.AddDoubleLine then return end
     if VepIndustriesMarketDB and VepIndustriesMarketDB.tooltip == false then return end
-    local r = T.ForItem(itemID)
-    if r then
-        tooltip:AddDoubleLine("|cffffd100Tendance " .. T.WINDOW .. " j|r", GM.TrendText(r))
+    local r = M.Report(itemID)
+    if #r.history > 0 then
+        tooltip:AddDoubleLine("|cffffd100Tendance " .. M.WINDOW .. " j|r", GM.TrendText(r))
     end
     if f:IsShown() and tooltip == GameTooltip then GM.ShowItem(itemID) end
 end
