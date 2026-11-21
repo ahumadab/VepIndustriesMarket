@@ -126,12 +126,18 @@ M.Ingest({
   [913] = { tier(50, 5, 2, 3) },                      -- 2 lots of 5, sold out next scan
   [914] = { tier(100, 1, 2, 4), tier(100, 1, 1, 3) }, -- time left moves down between scans
   [916] = { tier(100, 1, 2, 2) },                     -- Medium
+  [918] = { tier(100, 1, 5, 3) },                     -- reposted cheaper
+  [919] = { tier(100, 1, 2, 3), tier(120, 1, 3, 3) }, -- dearer tier cancelled
+  [920] = { tier(100, 1, 2, 3), tier(110, 1, 3, 3) }, -- cheapest tier bought out
 }, t0, "PvE", "Horde")
 M.Ingest({
   [910] = { tier(100, 1, 1, 3) },
   [912] = { tier(100, 1, 1, 3), tier(90, 1, 4, 4) },
   [914] = { tier(100, 1, 2, 3) },
   [915] = { tier(10, 1, 9, 4) },
+  [918] = { tier(95, 1, 5, 4) },
+  [919] = { tier(100, 1, 1, 3) },
+  [920] = { tier(110, 1, 1, 3) },
 }, t0 + 3600, "PvE", "Horde")
 local function rate(id) return M.Report(id).estimatedSalesPerDay end
 ok(near(rate(910), 2 * 24), "palier partiellement vendu : 4 disparues dont 2 Short -> 2 vendues en 1 h")
@@ -141,6 +147,9 @@ ok(rate(912) == 0, "nouveau palier : aucune vente")
 ok(near(rate(913), 10 * 24), "objet epuise : ses lots disparus comptent")
 ok(near(rate(914), 1 * 24), "palier suivi malgre le changement de temps restant")
 ok(rate(915) == nil and M.Report(915).confidence == nil, "objet nouveau : pas de ventes")
+ok(rate(918) == 0, "remis en vente moins cher : aucune vente")
+ok(near(rate(919), 1 * 24), "palier plus cher disparu : annule, pas vendu")
+ok(near(rate(920), 4 * 24), "acheteurs du moins cher : palier vide + baisse au nouveau minimum")
 ok(M.Report(910).confidence == "low", "1 jour de comparaison (jour ancien sans ventes ignore) -> non fiable")
 local t2 = time() - 3600 -- today 00:00
 M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 2, 2) } }, t2, "PvE", "Horde")

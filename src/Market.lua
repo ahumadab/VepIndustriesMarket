@@ -72,17 +72,21 @@ local MIN_GAP = 600
 -- scans further apart than this are not compared: Long auctions could expire in between and pass for sold
 local MAX_GAP = 7200
 
--- Units bought over `gap` seconds between two scans of an item: per tier (price, lot size, any time left), the
--- auctions gone beyond those that may have expired. Cancellations and reposts are accepted noise.
+-- Units bought over `gap` seconds between two scans of an item, buyers taking the cheapest first: per tier (price,
+-- lot size, any time left) cheaper than the new lowest price, or at it, the auctions gone beyond those that may have
+-- expired. Dearer tiers gone were cancelled, and a seller reposting cheaper lowers the new lowest price: neither
+-- counts (real scan of 2026-11-21: 38 897 arrows "sold" in 17 min, counting every tier gone).
 local function estimatedSales(before, after, gap)
-    local left, groups, units = {}, {}, 0
+    local low, left, groups, units = after[1] and after[1].price or math.huge, {}, {}, 0 -- after: by price
     local function key(t) return t.price .. ":" .. t.size end
     for _, t in ipairs(after) do left[key(t)] = (left[key(t)] or 0) + t.count end
     for _, t in ipairs(before) do
-        local g = groups[key(t)] or { size = t.size, count = 0, expired = 0 }
-        groups[key(t)] = g
-        g.count = g.count + t.count
-        if (BAND_MIN[t.timeLeft] or 0) < gap then g.expired = g.expired + t.count end
+        if t.price <= low then
+            local g = groups[key(t)] or { size = t.size, count = 0, expired = 0 }
+            groups[key(t)] = g
+            g.count = g.count + t.count
+            if (BAND_MIN[t.timeLeft] or 0) < gap then g.expired = g.expired + t.count end
+        end
     end
     for k, g in pairs(groups) do units = units + math.max(0, g.count - (left[k] or 0) - g.expired) * g.size end
     return units
