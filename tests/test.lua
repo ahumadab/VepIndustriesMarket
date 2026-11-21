@@ -27,6 +27,7 @@ local function stub(name)
 end
 
 time = os.time
+unpack = unpack or table.unpack -- a global in the game's Lua 5.1, gone from Fengari's 5.3
 date = os.date
 DAY0 = os.time({ year = 2020, month = 1, day = 1, hour = 0 })
 TODAY = 2516
