@@ -8,7 +8,7 @@ Aide un artisan à savoir si les objets qu'il fabrique se vendent à l'hôtel de
 
 **Scan complet**:
 Relevé de toutes les enchères de l'hôtel des ventes à un instant donné, limité à un toutes les 15 minutes par le serveur.
-_Avoid_: Full scan, getAll, replicate
+_Avoid_: Full scan, getAll, replicate (sauf pour nommer le mode replicate d'Auctionator)
 _Code_: `fullScan`
 
 **Historique**:

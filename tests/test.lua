@@ -4,6 +4,19 @@ local fails = 0
 local out = print -- print itself is replaced below to read the addon's chat messages
 local function ok(cond, name) if not cond then fails = fails + 1; out("FAIL " .. name) else out("ok   " .. name) end end
 
+-- The game's Lua 5.1 cannot yield across pcall, Fengari's 5.3 can: catch it here (checked at the end).
+local rawPcall, rawYield, protected, yieldInPcall = pcall, coroutine.yield, {}, nil
+local function unprotect(co, ...) protected[co] = protected[co] - 1; return ... end
+pcall = function(...)
+  local co = coroutine.running()
+  protected[co] = (protected[co] or 0) + 1
+  return unprotect(co, rawPcall(...))
+end
+coroutine.yield = function(...)
+  if (protected[coroutine.running()] or 0) > 0 then yieldInPcall = debug.traceback("yield inside pcall", 2) end
+  return rawYield(...)
+end
+
 -- generic stub: any field is a callable stub returning a stub
 local function stub(name)
   local s = {}
@@ -275,6 +288,8 @@ local okNo, e5 = pcall(fire, "PLAYER_LOGIN")
 ok(okNo and lastSaid():find("Auctionator absent"), "sans Auctionator : message sans erreur " .. tostring(e5))
 Auctionator = auctionator
 print = out
+
+ok(not yieldInPcall, "aucune coroutine ne cede dans un pcall (refuse par le Lua 5.1 du jeu) " .. tostring(yieldInPcall))
 
 if fails > 0 then error(fails .. " echec(s)", 0) end
 print("TOUT OK")

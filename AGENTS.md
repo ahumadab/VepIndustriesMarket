@@ -10,7 +10,7 @@ Addon World of Warcraft (serveur WoW Forever, interface 16001, API moderne `C_Au
 - Textes visibles en jeu : français avec accents. Code et commentaires : anglais.
 - État de l'addon en jeu (`VepIndustriesMarketDB`, dont `errors`) : `<jeu>/WTF/Account/<compte>/SavedVariables/VepIndustriesMarket.lua`, réécrit à chaque `/reload` ou déconnexion. Le relire après la validation de Boris.
 - Forever est `WOW_PROJECT_CAMELOT`, traité comme mainline par Auctionator (branche `Source_ModernAH`). Vérifier dans le code installé d'un addon avant de s'appuyer sur une API ou un guide retail/classic.
-- Les scans complets viennent d'Auctionator en mode replicate + autoscan (option Advanced « Use alternate slower scan mode by default » = `replicate_scan_3`). Le scan incrémental ne donne pas le détail par palier.
+- Les Scans complets viennent d'Auctionator en mode replicate avec autoscan : `replicate_scan_3` (Advanced, « Use alternate slower scan mode by default ») et `autoscan_2` (« Run autoscan when Auction House is opened ») à `true` dans `SavedVariables/Auctionator.lua`, où `AUCTIONATOR_CHARACTER_CONFIG` du personnage prime s'il n'est pas `nil`. Les vérifier avant de demander une validation en jeu. Le serveur limite à un scan par 15 min ; `/vim relire` réenregistre celui que le client garde en mémoire, perdu à chaque `/reload`. Le scan incrémental ne donne pas le détail par Palier.
 
 ## Agent skills
 
