@@ -8,6 +8,10 @@ GM.Market = GM.Market or {}
 local M = GM.Market
 
 M.WINDOW = T.WINDOW
+-- verdict from reliable estimated sales, by the days the current stock lasts at that pace: demand below DEMAND_DAYS,
+-- saturated above SATURATED_DAYS (stock left without any sale included), stable between.
+-- ponytail: provisional, picked on one evening of scans (2026-11-21); calibrate with Boris on 3 days of scans (#7)
+M.DEMAND_DAYS, M.SATURATED_DAYS = 2, 7
 -- daily summary kept, the span of the /vim window: ~170 KB per day of scans, ~55 KB more with estimated sales,
 -- ~5.6 MB in all after 21 days (accepted)
 local KEEP_DAYS = 21
@@ -174,7 +178,9 @@ function M.Status()
     return { time = fs.time, realm = fs.realm, faction = fs.faction, items = items, bytes = bytes }
 end
 
--- { verdict, trend = { price, stock, days, age }, estimatedSalesPerDay, confidence, history, today, tiers, daily }
+-- { verdict, source, trend = { price, stock, days, age }, estimatedSalesPerDay, confidence, history, today, tiers,
+-- daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
+-- (source "trend"); the stock they are set against is the item's in the latest full scan, 0 when absent.
 -- price/stock: relative change of the latest day vs the median of the window; history: ascending { day, price, stock }
 -- tiers: the item in the latest full scan, by price, lot size, time left; daily: { [day] = { price, stock, scans,
 -- estimatedSales, seconds, estimatedSalesPerDay, reliable } }, the last two on compared days only. estimatedSalesPerDay
@@ -200,14 +206,22 @@ function M.Report(itemID)
             e.estimatedSalesPerDay, e.reliable = e.estimatedSales * 86400 / e.seconds, days >= 2 and inWindow(d)
         end
     end
+    local tiers, verdict, source = encoded and decode(encoded) or {}, r.verdict, "trend"
+    if perDay and days >= 2 then
+        local stock = 0
+        for _, t in ipairs(tiers) do stock = stock + t.size * t.count end
+        verdict, source = stock < M.DEMAND_DAYS * perDay and "demand"
+            or stock > M.SATURATED_DAYS * perDay and "saturated" or "stable", "sales"
+    end
     return {
-        verdict = r.verdict,
+        verdict = verdict,
+        source = source,
         trend = { price = r.price, stock = r.stock, days = r.days, age = r.age },
         estimatedSalesPerDay = perDay,
         confidence = perDay and (days >= 2 and "high" or "low") or nil,
         history = hist,
         today = today,
-        tiers = encoded and decode(encoded) or {},
+        tiers = tiers,
         daily = daily,
     }
 end

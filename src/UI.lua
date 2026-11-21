@@ -289,7 +289,8 @@ local function onItemTooltip(tooltip, itemID)
     if VepIndustriesMarketDB and VepIndustriesMarketDB.tooltip == false then return end
     local r = M.Report(itemID)
     if #r.history > 0 then
-        tooltip:AddDoubleLine("|cffffd100Tendance " .. M.WINDOW .. " j|r", GM.TrendText(r))
+        tooltip:AddDoubleLine("|cffffd100" .. (r.source == "sales" and "Ventes estimées " or "Tendance ") .. M.WINDOW
+            .. " j|r", GM.TrendText(r))
     end
     if f:IsShown() and tooltip == GameTooltip then GM.ShowItem(itemID) end
 end
