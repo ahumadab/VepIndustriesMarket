@@ -17,3 +17,5 @@ gh pr create --base develop --fill   # corps : Closes #12
 ```
 
 `npm run release` refuse de tourner hors de `main` ou avec un arbre git sale.
+
+Branches fusionnées : GitHub supprime la branche distante à la fusion de la PR, et le hook `.githooks/post-merge` (branché par `npm install`) supprime au `git pull` suivant les branches locales dont la branche distante a disparu.
