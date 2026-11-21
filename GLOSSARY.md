@@ -56,17 +56,17 @@ _Code_: `confidence = "high"` pour l'objet, `reliable` pour un jour du résumé 
 **Verdict**:
 Classement d'un objet en Demande, Stable ou Saturé. Il se fonde sur les ventes estimées quand elles sont fiables, sinon sur la tendance ; l'infobulle indique laquelle.
 _Avoid_: Statut, note, score
-_Code_: `verdict` (`"demand"`, `"stable"`, `"saturated"`, `"none"` faute de données)
+_Code_: `verdict` (`"demand"`, `"stable"`, `"saturated"`, `"none"` faute de données), sa source `source` (`"sales"`, `"trend"`)
 
 **Demande**:
-Verdict d'un objet qui s'écoule : au rythme des ventes estimées, le stock actuel part en moins de 2 jours ; sans ventes estimées fiables, stock qui baisse sans que le prix chute.
+Verdict d'un objet qui s'écoule : au rythme des ventes estimées, le stock actuel part en moins de quelques jours ; sans ventes estimées fiables, stock qui baisse sans que le prix chute.
 _Avoid_: Hot, populaire
-_Code_: `demand`
+_Code_: `demand` (seuil `DEMAND_DAYS`)
 
 **Saturé**:
-Verdict d'un objet dont l'offre dépasse ce que les acheteurs absorbent : au rythme des ventes estimées, le stock actuel tient plus de 7 jours (ou rien ne se vend) ; sans ventes estimées fiables, le stock s'accumule ou le prix baisse.
+Verdict d'un objet dont l'offre dépasse ce que les acheteurs absorbent : au rythme des ventes estimées, le stock actuel tient plus d'une semaine environ, ou rien ne se vend ; sans ventes estimées fiables, le stock s'accumule ou le prix baisse.
 _Avoid_: Mort, invendable
-_Code_: `saturated`
+_Code_: `saturated` (seuil `SATURATED_DAYS`)
 
 **Fenêtre**:
 Nombre de jours d'historique pris en compte pour la tendance (7 par défaut).

@@ -175,6 +175,7 @@ ok(rate(999999) == nil and M.Report(999999).confidence == nil, "objet sans scan 
 
 -- verdict from reliable estimated sales: days the current stock lasts at that pace (provisional thresholds, #7)
 VepIndustriesMarketDB = {}
+ok(M.Report(14048).verdict == "saturated" and M.Report(14048).source == "trend", "14048 sature par la tendance")
 local function twoDays(before, after) -- one comparison of 1 h yesterday, one today: reliable
   M.Ingest(before, t0, "PvE", "Horde"); M.Ingest(after, t0 + 3600, "PvE", "Horde")
   M.Ingest(before, t2, "PvE", "Horde"); M.Ingest(after, t2 + 3600, "PvE", "Horde")
@@ -187,6 +188,7 @@ ok(bySales(14048) == "demand", "ventes fiables : 24/jour pour 29 en stock (1,2 j
 ok(bySales(930) == "stable", "ventes fiables : 24/jour pour 100 en stock (4,2 j) -> stable")
 ok(bySales(931) == "saturated", "ventes fiables : aucune vente, 50 en stock -> sature")
 ok(bySales(932) == "demand", "ventes fiables : objet epuise -> demande")
+ok(M.Report(930).estimatedSalesDays == 2, "ventes fiables : nombre de jours compares")
 local byTrend = M.Report(14047)
 ok(byTrend.source == "trend" and byTrend.verdict == "stable", "sans ventes fiables : verdict de la tendance")
 
@@ -307,16 +309,23 @@ ok(okTip and lines[1] == "|cffffd100Tendance 7 j|r || |cffff5959Saturé|r  prix 
   .. "|cffff6666+190%|r |cff9d9d9d(2 j)|r", "ligne infobulle " .. tostring(e2) .. " " .. tostring(lines[1]))
 local okNone = pcall(postCall, tip, { id = 999999 })
 ok(okNone and #lines == 1, "pas de ligne infobulle pour un objet absent")
-M.Ingest({ [4338] = { tier(100, 1, 9, 3) } }, t0, "PvE", "Horde")
-M.Ingest({ [4338] = { tier(100, 1, 6, 3) } }, t0 + 3600, "PvE", "Horde")
+-- 933: no Auctionator history, sells 1 of 5 then 1 of 4
+M.Ingest({ [4338] = { tier(100, 1, 9, 3) }, [933] = { tier(100, 1, 5, 3) } }, t0, "PvE", "Horde")
+M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [933] = { tier(100, 1, 4, 3) } }, t0 + 3600, "PvE", "Horde")
 postCall(tip, { id = 4338 })
 ok(lines[2]:find("|cff9d9d9d≈ 72/jour|r", 1, true), "infobulle : ventes estimees grisees sous le seuil " .. lines[2])
-M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [997] = { tier(1, 1, 1, 3) } }, t2, "PvE", "Horde")
-M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [998] = { tier(1, 1, 1, 3) } }, t3, "PvE", "Horde")
+M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [933] = { tier(100, 1, 4, 3) }, [997] = { tier(1, 1, 1, 3) } }, t2,
+  "PvE", "Horde")
+M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [933] = { tier(100, 1, 3, 3) }, [998] = { tier(1, 1, 1, 3) } }, t3,
+  "PvE", "Horde")
 postCall(tip, { id = 4338 })
 ok(lines[3]:find("|cffffffff≈ 54/jour|r", 1, true), "infobulle : ventes estimees fiables " .. lines[3])
-ok(lines[2]:find("^|cffffd100Tendance 7 j|r") and lines[3]:find("^|cffffd100Ventes estimées 7 j|r"),
-  "infobulle : source du verdict, tendance puis ventes estimees fiables " .. lines[3])
+-- label colour: TITLE in src/UI.lua
+ok(lines[2]:find("^|cffffd100Tendance 7 j|r") and lines[3]:find("^|cffffd100Ventes estimées 7 j|r")
+  and lines[3]:find("(2 j)", 1, true), "infobulle : source du verdict et jours de ventes estimees " .. lines[3])
+postCall(tip, { id = 933 })
+ok(lines[4] and lines[4]:find("^|cffffd100Ventes estimées 7 j|r || |cff4cff4cDemande|r |cff9d9d9d%(2 j%)|r"),
+  "infobulle : verdict des ventes sans historique Auctionator, sans tendance " .. tostring(lines[4]))
 VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily = nil, nil
 local slow = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 2.5 })
 ok(slow:find("≈ 2,5/jour", 1, true), "infobulle : decimale sous 10/jour " .. slow)

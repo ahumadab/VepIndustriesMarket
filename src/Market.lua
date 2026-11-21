@@ -178,8 +178,8 @@ function M.Status()
     return { time = fs.time, realm = fs.realm, faction = fs.faction, items = items, bytes = bytes }
 end
 
--- { verdict, source, trend = { price, stock, days, age }, estimatedSalesPerDay, confidence, history, today, tiers,
--- daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
+-- { verdict, source, trend = { price, stock, days, age }, estimatedSalesPerDay, estimatedSalesDays (compared days in
+-- the window), confidence, history, today, tiers, daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
 -- (source "trend"); the stock they are set against is the item's in the latest full scan, 0 when absent.
 -- price/stock: relative change of the latest day vs the median of the window; history: ascending { day, price, stock }
 -- tiers: the item in the latest full scan, by price, lot size, time left; daily: { [day] = { price, stock, scans,
@@ -200,14 +200,14 @@ function M.Report(itemID)
             days, units, seconds = days + 1, units + daily[d].estimatedSales, seconds + daily[d].seconds
         end
     end
-    local perDay = seconds > 0 and units * 86400 / seconds or nil
+    local perDay, reliable = seconds > 0 and units * 86400 / seconds or nil, days >= 2
     for d, e in pairs(daily) do
         if e.seconds > 0 then
-            e.estimatedSalesPerDay, e.reliable = e.estimatedSales * 86400 / e.seconds, days >= 2 and inWindow(d)
+            e.estimatedSalesPerDay, e.reliable = e.estimatedSales * 86400 / e.seconds, reliable and inWindow(d)
         end
     end
     local tiers, verdict, source = encoded and decode(encoded) or {}, r.verdict, "trend"
-    if perDay and days >= 2 then
+    if perDay and reliable then
         local stock = 0
         for _, t in ipairs(tiers) do stock = stock + t.size * t.count end
         verdict, source = stock < M.DEMAND_DAYS * perDay and "demand"
@@ -218,7 +218,8 @@ function M.Report(itemID)
         source = source,
         trend = { price = r.price, stock = r.stock, days = r.days, age = r.age },
         estimatedSalesPerDay = perDay,
-        confidence = perDay and (days >= 2 and "high" or "low") or nil,
+        estimatedSalesDays = days,
+        confidence = perDay and (reliable and "high" or "low") or nil,
         history = hist,
         today = today,
         tiers = tiers,

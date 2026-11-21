@@ -11,6 +11,7 @@ local COLOR = {
     none = { 0.60, 0.60, 0.60 },
 }
 local PRICE, STOCK, SALES = { 1.00, 0.82, 0.00 }, { 0.45, 0.70, 1.00 }, { 0.30, 0.90, 0.40 }
+local TITLE = { 1.00, 0.82, 0.00 } -- tooltip label, the game's gold
 local function hex(c) return string.format("|cff%02x%02x%02x", math.floor(c[1] * 255), math.floor(c[2] * 255),
         math.floor(c[3] * 255)) end
 -- invert: for stock, more is bad for a seller (red)
@@ -32,12 +33,13 @@ end
 function GM.TrendText(r)
     local v, trend = r.verdict, r.trend
     local txt = hex(COLOR[v]) .. LABEL[v] .. "|r"
-    if v ~= "none" then
+    local sales = r.source == "sales"
+    if trend.price then -- nil when the trend has no verdict, even under a verdict from the sales
         txt = txt .. "  prix " .. pct(trend.price) .. "  stock " .. pct(trend.stock, true)
-    elseif trend.age and trend.age > M.WINDOW then
+    elseif v == "none" and trend.age and trend.age > M.WINDOW then
         txt = hex(COLOR.none) .. "Données vieilles de " .. trend.age .. " j|r"
     end
-    txt = txt .. string.format(" |cff9d9d9d(%d j)|r", trend.days or 0)
+    txt = txt .. string.format(" |cff9d9d9d(%d j)|r", (sales and r.estimatedSalesDays or trend.days) or 0)
     local perDay = r.estimatedSalesPerDay
     if perDay then -- grey while not reliable
         txt = txt .. "  " .. (r.confidence == "high" and "|cffffffff" or "|cff9d9d9d") .. "≈ " .. perDayText(perDay)
@@ -288,8 +290,8 @@ local function onItemTooltip(tooltip, itemID)
     if not itemID or not tooltip.AddDoubleLine then return end
     if VepIndustriesMarketDB and VepIndustriesMarketDB.tooltip == false then return end
     local r = M.Report(itemID)
-    if #r.history > 0 then
-        tooltip:AddDoubleLine("|cffffd100" .. (r.source == "sales" and "Ventes estimées " or "Tendance ") .. M.WINDOW
+    if #r.history > 0 or r.source == "sales" then
+        tooltip:AddDoubleLine(hex(TITLE) .. (r.source == "sales" and "Ventes estimées " or "Tendance ") .. M.WINDOW
             .. " j|r", GM.TrendText(r))
     end
     if f:IsShown() and tooltip == GameTooltip then GM.ShowItem(itemID) end
