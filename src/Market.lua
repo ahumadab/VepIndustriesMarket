@@ -177,8 +177,9 @@ end
 -- { verdict, trend = { price, stock, days, age }, estimatedSalesPerDay, confidence, history, today, tiers, daily }
 -- price/stock: relative change of the latest day vs the median of the window; history: ascending { day, price, stock }
 -- tiers: the item in the latest full scan, by price, lot size, time left; daily: { [day] = { price, stock, scans,
--- estimatedSales, seconds } }. estimatedSalesPerDay over the window, nil before two compared scans; confidence
--- "high" from 2 days of comparisons in the window (so at least 3 scans), "low" below.
+-- estimatedSales, seconds, estimatedSalesPerDay, reliable } }, the last two on compared days only. estimatedSalesPerDay
+-- over the window, nil before two compared scans; confidence "high" from 2 days of comparisons in the window (so at
+-- least 3 scans), "low" below; a day is reliable when it is in the window of a "high" confidence.
 function M.Report(itemID)
     local hist = T.History(itemID) or {}
     local today = T.Today()
@@ -186,13 +187,19 @@ function M.Report(itemID)
     local db = VepIndustriesMarketDB or {}
     local encoded = db.fullScan and db.fullScan.items[itemID]
     local daily, days, units, seconds = {}, 0, 0, 0
+    local function inWindow(d) return today and d > today - M.WINDOW end
     for d, v in pairs(db.daily and db.daily[itemID] or {}) do
         daily[d] = readDay(v)
-        if today and d > today - M.WINDOW and daily[d].seconds > 0 then
+        if inWindow(d) and daily[d].seconds > 0 then
             days, units, seconds = days + 1, units + daily[d].estimatedSales, seconds + daily[d].seconds
         end
     end
     local perDay = seconds > 0 and units * 86400 / seconds or nil
+    for d, e in pairs(daily) do
+        if e.seconds > 0 then
+            e.estimatedSalesPerDay, e.reliable = e.estimatedSales * 86400 / e.seconds, days >= 2 and inWindow(d)
+        end
+    end
     return {
         verdict = r.verdict,
         trend = { price = r.price, stock = r.stock, days = r.days, age = r.age },

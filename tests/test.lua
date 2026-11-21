@@ -243,14 +243,25 @@ GetCoinTextureString = function(c) return tostring(c) .. "c" end
 GetRealmName = function() return "PvE" end
 UnitFactionGroup = function() return "Horde" end
 hooksecurefunc = function() end
-local frames = {}
+local frames, textures = {}, {}
+-- texture double recording its color, height and visibility, to count the bars drawn
+local function texture()
+  local t = stub("texture")
+  t.SetColorTexture = function(self, r, g, b, a) self.color = string.format("%.2f %.2f %.2f %.2f", r, g, b, a or 1) end
+  t.SetSize = function(self, w, h) self.height = h end
+  t.Show = function(self) self.shown = true end
+  t.Hide = function(self) self.shown = false end
+  textures[#textures + 1] = t
+  return t
+end
 CreateFrame = function(kind, name)
   local f = stub(name or kind)
+  f.CreateTexture = texture
   local shown = false
   f.IsShown = function() return shown end
   f.Show = function() shown = true end
   f.Hide = function() shown = false end
-  f.SetScript = function(self, script, fn) if script == "OnEvent" then rawset(self, "onEvent", fn) end end
+  f.SetScript = function(self, script, fn) rawset(self, script, fn) end
   frames[#frames + 1] = f
   return f
 end
@@ -259,7 +270,7 @@ print = function(s) said[#said + 1] = s end
 local function lastSaid() return said[#said] or "" end
 local function fire(event, arg)
   for _, f in ipairs(frames) do
-    local onEvent = rawget(f, "onEvent")
+    local onEvent = rawget(f, "OnEvent")
     if onEvent then onEvent(f, event, arg) end
   end
 end
@@ -272,6 +283,7 @@ ok(postCall ~= nil, "hook infobulle enregistre")
 local lines = {}
 local tip = GameTooltip
 tip.AddDoubleLine = function(_, a, b) lines[#lines + 1] = a .. " || " .. b end
+tip.AddLine = function(_, a) lines[#lines + 1] = a end
 local okTip, e2 = pcall(postCall, tip, { id = 14048 })
 ok(okTip and lines[1] == "|cffffd100Tendance 7 j|r || |cffff5959Saturé|r  prix |cff66ff66+8%|r  stock "
   .. "|cffff6666+190%|r |cff9d9d9d(2 j)|r", "ligne infobulle " .. tostring(e2) .. " " .. tostring(lines[1]))
@@ -298,6 +310,61 @@ local okWin, e3 = pcall(function()
   SlashCmdList.VEPINDUSTRIESMARKET("tooltip"); SlashCmdList.VEPINDUSTRIESMARKET("tooltip")
 end)
 ok(okWin, "fenetre + commandes " .. tostring(e3))
+
+-- /vim window: one estimated sales bar per compared day, from the real scan pairs replayed on earlier days; coloured
+-- in the window of a reliable estimate, grey elsewhere (colours of src/UI.lua: SALES and COLOR.none)
+local SALES, GREY = "0.30 0.90 0.40 0.70", "0.60 0.60 0.60 0.45"
+local function salesBars(id)
+  VepIndustriesMarket.ShowItem(id, true)
+  local n, tallest = { [SALES] = 0, [GREY] = 0 }, 0
+  for _, t in ipairs(textures) do
+    if t.shown and n[t.color] then n[t.color], tallest = n[t.color] + 1, math.max(tallest, t.height) end
+  end
+  return { n[SALES], n[GREY], tallest }
+end
+local function dayAt(day, s) return DAY0 + day * 86400 + s end
+local function pair(day, a, b, gap)
+  M.Ingest(rowsToScan(a), dayAt(day, 72000), "PvE", "Horde")
+  M.Ingest(rowsToScan(b), dayAt(day, 72000 + gap), "PvE", "Horde")
+end
+VepIndustriesMarketDB = {}
+local okBars, e6 = pcall(function()
+  pair(TODAY - 10, FULLSCAN_1121_2023, FULLSCAN_1121_2039, 919) -- consecutive autoscans, out of the 7-day window
+  pair(TODAY - 3, FULLSCAN, FULLSCAN_1121_2023, 3600)
+end)
+local lone = salesBars(4306)
+local okBars2 = pcall(pair, TODAY - 1, FULLSCAN, FULLSCAN_1121_2023, 3600)
+local partly, none = salesBars(4306), salesBars(14048)
+ok(okBars and okBars2 and lone[1] == 0 and lone[2] == 2, string.format(
+  "fenetre : 1 jour de ventes estimees dans la fenetre, non fiable -> 2 barres grisees (%d, %d) %s", lone[1], lone[2],
+  tostring(e6)))
+ok(partly[1] == 2 and partly[2] == 1 and partly[3] == 120 and M.Report(4306).confidence == "high", string.format(
+  "fenetre : 3 jours reels, 2 fiables -> 2 barres + 1 grisee hors fenetre, la plus haute a 120 (%d, %d, %s)",
+  partly[1], partly[2], tostring(partly[3])))
+ok(none[1] == 0 and none[2] == 0, "fenetre : objet sans ventes estimees -> aucune barre")
+
+-- hovering a day of the graph lists its values (4306: Auctionator history on TODAY - 1, not on TODAY - 3 or - 10)
+VepIndustriesMarket.ShowItem(4306, true)
+local columns = {}
+for _, fr in ipairs(frames) do
+  if rawget(fr, "OnEnter") then columns[#columns + 1] = fr end
+end
+local function hover(daysAgo)
+  local col = columns[#columns - daysAgo]
+  lines = {}
+  local okHover, e7 = pcall(function() rawget(col, "OnEnter")(col); rawget(col, "OnLeave")(col) end)
+  return okHover and table.concat(lines, "\n") or tostring(e7)
+end
+local yesterday, older, oldest, empty = hover(1), hover(3), hover(10), hover(20)
+ok(#columns == 21, "fenetre : une zone de survol par jour (" .. #columns .. ")")
+ok(yesterday:find("il y a 1 j", 1, true) and yesterday:find("Prix minimum || 90|cffeda55fc|r", 1, true)
+  and yesterday:find("Stock || 46558", 1, true) and yesterday:find("Ventes estimées || |cffffffff≈ ", 1, true),
+  "survol d'hier : prix, stock et ventes estimees fiables\n" .. yesterday)
+ok(older:find("Ventes estimées", 1, true) and not older:find("Stock", 1, true),
+  "survol sans historique Auctionator : ventes estimees seules\n" .. older)
+ok(oldest:find("pas fiable", 1, true), "survol d'un jour hors fenetre : ventes estimees non fiables\n" .. oldest)
+ok(empty:find("Aucune donnée", 1, true), "survol d'un jour sans donnees\n" .. empty)
+VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily = nil, nil
 
 -- Auctionator adapter, with API doubles
 fire("ADDON_LOADED", "VepIndustriesMarket")
