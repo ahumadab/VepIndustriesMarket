@@ -32,7 +32,7 @@ _Avoid_: Enchère, ligne, tier
 _Code_: `tier`
 
 **Résumé journalier**:
-Pour un objet, par jour Auctionator : le prix minimum et le stock maximum vus dans les scans complets du jour, et le nombre de ces scans. Conservé 21 jours.
+Pour un objet, par jour Auctionator : le prix minimum et le stock maximum vus dans les scans complets du jour, le nombre de ces scans et les ventes estimées depuis le scan précédent, avec la durée sur laquelle elles portent. Conservé 21 jours.
 _Avoid_: Daily, agrégat
 _Code_: `daily`
 
