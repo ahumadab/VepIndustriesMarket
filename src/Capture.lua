@@ -39,18 +39,36 @@ end
 local SETUP = "les Ventes estimées demandent un Scan complet à l'ouverture de l'hôtel des ventes. Dans les options "
     .. "d'Auctionator, coche « Run autoscan when Auction House is opened » et, dans Advanced, « Use alternate slower "
     .. "scan mode by default »."
+-- ponytail: whole scan in one frame (~300k auctions), batch it over frames if the hitch shows in game
+local function ingest(data)
+    local ok, e = pcall(M.Ingest, toFullScan(data), time(), GetRealmName(), UnitFactionGroup("player"))
+    if not ok then return logErr("scan", e) end
+    GM.Say(string.format("Scan complet enregistré : %d objets (/reload pour sauvegarder).", M.Status().items))
+end
+
 local warned = false -- incremental scans: once per session
 local listener = {}
 function listener:ReceiveEvent(event, data)
-    if event ~= Auctionator.FullScan.Events.ScanComplete then
-        if not warned then GM.Say("Auctionator a fait un scan incrémental : " .. SETUP) end
+    if event == Auctionator.FullScan.Events.ScanComplete then
+        ingest(type(data) == "table" and data or {})
+    elseif not warned then
         warned = true
-        return
+        GM.Say("Auctionator a fait un scan incrémental : " .. SETUP)
     end
-    -- ponytail: whole scan in one frame (~300k auctions), batch it over frames if the hitch shows in game
-    local ok, e = pcall(M.Ingest, toFullScan(type(data) == "table" and data or {}), time(), GetRealmName(),
-        UnitFactionGroup("player"))
-    if not ok then logErr("scan", e) end
+end
+
+-- Dev: ingest again the last full scan the client keeps in memory, the server allowing one every 15 minutes
+function GM.Reread()
+    local AH = C_AuctionHouse
+    local n = AH and AH.GetNumReplicateItems and AH.GetNumReplicateItems() or 0
+    if n < 1 then
+        return GM.Say("aucun Scan complet en mémoire : ouvre l'hôtel des ventes après un scan d'Auctionator.")
+    end
+    local data = {}
+    for i = 0, n - 1 do -- the replicate API is 0-based
+        data[i + 1] = { replicateInfo = { AH.GetReplicateItemInfo(i) }, timeLeft = AH.GetReplicateItemTimeLeft(i) }
+    end
+    ingest(data)
 end
 
 local f = CreateFrame("Frame")

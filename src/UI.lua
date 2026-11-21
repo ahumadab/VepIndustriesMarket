@@ -261,7 +261,9 @@ SlashCmdList.VEPINDUSTRIESMARKET = function(arg)
         (VepIndustriesMarketDB.tooltip and "activée" or "désactivée"))
     elseif cmd == "status" then
         status()
+    elseif cmd == "relire" then
+        GM.Reread()
     else
-        GM.Say("/vim (fenêtre) | /vim item <lien> | /vim unpin | /vim tooltip | /vim status")
+        GM.Say("/vim (fenêtre) | /vim item <lien> | /vim unpin | /vim tooltip | /vim status | /vim relire")
     end
 end

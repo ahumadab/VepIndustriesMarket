@@ -227,6 +227,20 @@ ok(st.items == FULLSCAN_ITEMS and fullSize < 1e6,
 SlashCmdList.VEPINDUSTRIESMARKET("status")
 ok(lastSaid():find(FULLSCAN_ITEMS .. " objets"), "/vim status : " .. lastSaid())
 
+-- /vim relire: the same scan read again from the client's memory counts as a second scan of the day
+C_AuctionHouse = {
+  GetNumReplicateItems = function() return #data end,
+  GetReplicateItemInfo = function(i) return table.unpack(data[i + 1].replicateInfo, 1, 17) end,
+  GetReplicateItemTimeLeft = function(i) return data[i + 1].timeLeft end,
+}
+SlashCmdList.VEPINDUSTRIESMARKET("relire")
+local again = M.Report(5500)
+ok(lastSaid():find(FULLSCAN_ITEMS .. " objets") and #again.tiers == 389 and again.daily[TODAY].scans == 2
+  and again.daily[TODAY].stock == 1517, "/vim relire : scan en memoire enregistre, 2 scans dans la journee")
+C_AuctionHouse.GetNumReplicateItems = function() return 0 end
+SlashCmdList.VEPINDUSTRIESMARKET("relire")
+ok(lastSaid():find("aucun Scan complet en mémoire"), "/vim relire sans scan en memoire")
+
 -- incremental scan: warned once
 local before = #said
 incremental:ReceiveEvent("full_incremental_scan_complete", {})
