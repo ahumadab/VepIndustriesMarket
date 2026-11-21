@@ -116,7 +116,7 @@ VepIndustriesMarketDB = nil
 ok(#M.Report(900).tiers == 0 and M.Status() == nil, "sans donnees sauvegardees -> rien, sans erreur")
 
 -- estimated sales: auctions gone from a tier (price, lot size) between two scans, those Short before excepted
-VepIndustriesMarketDB = {}
+VepIndustriesMarketDB = { daily = { [910] = { [TODAY - 3] = "100 5 4" } } } -- a day saved before estimated sales
 local t0 = time() - 86400 -- yesterday 01:00
 M.Ingest({
   [910] = { tier(100, 1, 3, 3), tier(100, 1, 2, 1) }, -- 5 auctions, 2 of them Short
@@ -138,13 +138,17 @@ ok(rate(912) == 0, "nouveau palier : aucune vente")
 ok(near(rate(913), 10 * 4), "objet epuise : ses lots disparus comptent")
 ok(near(rate(914), 1 * 4), "palier suivi malgre le changement de temps restant")
 ok(rate(915) == nil and M.Report(915).confidence == nil, "objet nouveau : pas de ventes")
-ok(M.Report(910).confidence == "low", "1 jour, 2 scans -> non fiable")
+ok(M.Report(910).confidence == "low", "1 jour de comparaison (jour ancien sans ventes ignore) -> non fiable")
 M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, time(), "PvE", "Horde")
 ok(near(rate(910), 2) and M.Report(910).confidence == "high", "2 jours, 3 scans : 2 vendues en 24 h, fiable")
-M.Ingest({}, time() + 60, "PvE", "Horde")
-ok(near(rate(910), 2), "scans tres rapproches : pas mesures")
+M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, time() + 1800, "PvE", "Horde")
+ok(near(rate(910), 2) and M.Status().time == time(), "meme scan relu : pas compare, garde son heure")
+M.Ingest({}, time() + 2000, "PvE", "Horde")
+ok(M.Status().items == 1, "scan vide ignore")
+M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, time() + 60, "PvE", "Horde")
+ok(near(rate(910), 2) and M.Status().time == time(), "scans tres rapproches : pas compares")
 M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, time() + 3600, "PvE", "Horde")
-M.Ingest({}, time() + 7200, "PvE", "Alliance")
+M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, time() + 7200, "PvE", "Alliance")
 ok(near(rate(910), 2), "autre faction : pas comparee")
 ok(rate(999999) == nil and M.Report(999999).confidence == nil, "objet sans scan complet : pas de ventes, sans erreur")
 
@@ -223,7 +227,7 @@ M.Ingest({ [4338] = { tier(100, 1, 9, 3) } }, t0, "PvE", "Horde")
 M.Ingest({ [4338] = { tier(100, 1, 6, 3) } }, t0 + 6 * 3600, "PvE", "Horde")
 postCall(tip, { id = 4338 })
 ok(lines[2]:find("|cff9d9d9d≈ 12/jour|r", 1, true), "infobulle : ventes estimees grisees sous le seuil " .. lines[2])
-M.Ingest({ [4338] = { tier(100, 1, 6, 3) } }, time(), "PvE", "Horde")
+M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [998] = { tier(1, 1, 1, 3) } }, time(), "PvE", "Horde")
 postCall(tip, { id = 4338 })
 ok(lines[3]:find("|cffffffff≈ 3/jour|r", 1, true), "infobulle : ventes estimees fiables " .. lines[3])
 M.Ingest({ [4338] = { tier(100, 1, 4, 3) } }, time() + 86400, "PvE", "Horde") -- 5 sold in 48 h

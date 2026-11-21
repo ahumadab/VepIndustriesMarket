@@ -30,10 +30,10 @@ function GM.TrendText(r)
         txt = hex(COLOR.none) .. "Données vieilles de " .. trend.age .. " j|r"
     end
     txt = txt .. string.format(" |cff9d9d9d(%d j)|r", trend.days or 0)
-    local n = r.estimatedSalesPerDay
-    if n then -- grey while not reliable; one decimal below 10, French comma
-        local s = n < 10 and (string.format("%.1f", n):gsub("%.0$", ""):gsub("%.", ",")) or
-            string.format("%d", math.floor(n + 0.5))
+    local perDay = r.estimatedSalesPerDay
+    if perDay then -- grey while not reliable; one decimal below 10, French comma
+        local s = perDay < 10 and (string.format("%.1f", perDay):gsub("%.0$", ""):gsub("%.", ",")) or
+            string.format("%d", math.floor(perDay + 0.5))
         txt = txt .. "  " .. (r.confidence == "high" and "|cffffffff" or "|cff9d9d9d") .. "≈ " .. s .. "/jour|r"
     end
     return txt
