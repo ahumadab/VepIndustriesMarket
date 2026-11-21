@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: VepIndustries Market
+## Notes: Tendance prix/stock des objets de l'hôtel des ventes (historique Auctionator). Par VepIndustries.
+## Author: VepIndustries (Boris AHUMADA)
+## Version: @version@
+## OptionalDeps: Auctionator
+## SavedVariables: VepIndustriesMarketDB
+
+Probe.lua
+Trend.lua
+UI.lua

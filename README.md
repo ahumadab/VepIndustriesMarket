@@ -1,0 +1,25 @@
+# VepIndustries Market
+
+Addon WoW Forever (interface 16001) par VepIndustries : tendance prix/stock des objets de l'hôtel des ventes, à partir de l'historique d'Auctionator.
+
+- Infobulle : `Tendance 7 j  Demande | Stable | Saturé  prix ±x %  stock ±y %  (n j)`
+- `/vim` : fenêtre graphique 21 jours (prix = ligne, stock = barres). `/vim item <lien>`, `/vim unpin`, `/vim tooltip`, `/vim scan`.
+
+## Développement
+
+```bash
+npm install
+npm test          # logique + smoke test UI (Fengari + doublures de l'API WoW)
+npm run deploy    # tests -> copie dans AddOns/VepIndustriesMarket (version x.y.z-dev+sha)
+npm run release   # idem + zip dans dist/ + tag git vX.Y.Z (arbre git propre requis)
+```
+
+Dossier du jeu : variable `WOW_ADDONS`, par défaut `C:/Program Files (x86)/World of Warcraft/_forever_/Interface/AddOns`.
+
+Les tests ne prouvent pas le rendu en jeu : vérifier avec `/reload` après chaque deploy.
+
+## Structure
+
+- `src/` : l'addon tel qu'il est copié dans le jeu (`@version@` remplacé dans le `.toc`)
+- `tests/` : `test.lua`, `fixtures/realdata.lua` (historique Auctionator réel exporté)
+- `scripts/build.mjs` : deploy / release
