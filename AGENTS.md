@@ -8,6 +8,7 @@ Addon World of Warcraft (serveur WoW Forever, interface 16001, API moderne `C_Au
 - `npm test` doit passer avant tout deploy (le script le garantit). Les tests (Fengari + doublures de l'API WoW) ne prouvent pas le rendu en jeu : faire valider par Boris avec `/reload`.
 - Lua du jeu : 5.1, Fengari : 5.3. Arrondir avant `%d`/`%x` dans `string.format`.
 - Textes visibles en jeu : français avec accents. Code et commentaires : anglais.
+- État de l'addon en jeu (`VepIndustriesMarketDB`, dont `errors`) : `<jeu>/WTF/Account/<compte>/SavedVariables/VepIndustriesMarket.lua`, réécrit à chaque `/reload` ou déconnexion. Le relire après la validation de Boris.
 - Forever est `WOW_PROJECT_CAMELOT`, traité comme mainline par Auctionator (branche `Source_ModernAH`). Vérifier dans le code installé d'un addon avant de s'appuyer sur une API ou un guide retail/classic.
 - Les scans complets viennent d'Auctionator en mode replicate + autoscan (option Advanced « Use alternate slower scan mode by default » = `replicate_scan_3`). Le scan incrémental ne donne pas le détail par palier.
 
@@ -19,7 +20,7 @@ Gitflow : `main` (versions taguées), `develop` (intégration, par défaut), `fe
 
 ### Issue tracker
 
-Les tickets vivent dans les GitHub Issues de `ahumadab/VepIndustriesMarket` (CLI `gh`). See `docs/agents/issue-tracker.md`.
+Les tickets vivent dans les GitHub Issues de `ahumadab/VepIndustriesMarket` (CLI `gh`). Lire un ticket : `gh issue view <n> --json title,body,labels,comments`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
