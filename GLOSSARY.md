@@ -31,6 +31,11 @@ Dans un scan complet, l'ensemble des enchères d'un objet au même prix unitaire
 _Avoid_: Enchère, ligne, tier
 _Code_: `tier`
 
+**Résumé journalier**:
+Pour un objet, par jour Auctionator : le prix minimum et le stock maximum vus dans les scans complets du jour, et le nombre de ces scans. Conservé 21 jours.
+_Avoid_: Daily, agrégat
+_Code_: `daily`
+
 ## Analyse
 
 **Tendance**:

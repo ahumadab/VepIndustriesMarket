@@ -1,7 +1,8 @@
 -- Run: npm test. Fengari + WoW API doubles: checks logic and that UI code runs without nil errors.
 -- Does NOT prove in-game rendering.
 local fails = 0
-local function ok(cond, name) if not cond then fails = fails + 1; print("FAIL " .. name) else print("ok   " .. name) end end
+local out = print -- print itself is replaced below to read the addon's chat messages
+local function ok(cond, name) if not cond then fails = fails + 1; out("FAIL " .. name) else out("ok   " .. name) end end
 
 -- generic stub: any field is a callable stub returning a stub
 local function stub(name)
@@ -18,11 +19,17 @@ DAY0 = os.time({ year = 2020, month = 1, day = 1, hour = 0 })
 TODAY = 2516
 time = function() return DAY0 + TODAY * 86400 + 3600 end
 dofile("fixtures/realdata.lua")
+dofile("fixtures/fullscan.lua")
+LISTENERS = {}
+AUCTIONATOR_CONFIG = { replicate_scan_3 = true, autoscan_2 = true }
 Auctionator = {
   Constants = { SCAN_DAY_0 = DAY0 },
   Database = { GetPriceHistory = function(self, key) return FAKE[key] or DATA[key] or {} end },
-  EventBus = { Register = function() end },
-  FullScan = { Events = { ScanComplete = "x" } },
+  EventBus = { Register = function(_, l, events) for _, e in ipairs(events) do LISTENERS[e] = l end end },
+  FullScan = { Events = { ScanComplete = "replicate_scan_complete" } },
+  IncrementalScan = { Events = { ScanComplete = "full_incremental_scan_complete" } },
+  Config = { Options = { REPLICATE_SCAN = "replicate_scan_3", AUTOSCAN = "autoscan_2" },
+    Get = function(name) return AUCTIONATOR_CONFIG[name] end },
 }
 
 dofile("../src/Trend.lua")
@@ -72,9 +79,28 @@ local okNoAuc, noAuc = pcall(M.Report, 14048)
 ok(okNoAuc and noAuc.verdict == "none" and #noAuc.history == 0, "sans Auctionator -> none sans erreur")
 Auctionator = auctionator
 
--- a full scan is accepted but not used yet
-local okIngest = pcall(M.Ingest, { [14048] = { { price = 100, size = 1, count = 3, timeLeft = 2 } } }, time())
-ok(okIngest and M.Report(14048).estimatedSalesPerDay == nil, "Ingest accepte un scan complet")
+-- full scans: only the latest is kept, the daily summary counts every scan of the day
+VepIndustriesMarketDB = {}
+local function tier(price, size, count, timeLeft) return { price = price, size = size, count = count, timeLeft = timeLeft } end
+M.Ingest({ [900] = { tier(300, 1, 1, 3), tier(120, 20, 2, 2) }, [901] = { tier(5, 1, 1, 1) } }, time() - 60)
+M.Ingest({ [900] = { tier(150, 5, 1, 4), tier(130, 1, 2, 3), tier(130, 1, 3, 1), tier(130, 200, 1, 3) },
+  [902] = {} }, time())
+local scanned = M.Report(900)
+local t1, t2, d = scanned.tiers[1], scanned.tiers[2], scanned.daily[TODAY]
+ok(#scanned.tiers == 4 and t1.price == 130 and t1.size == 1 and t1.count == 3 and t1.timeLeft == 1
+  and t2.price == 130 and t2.size == 1 and t2.count == 2 and t2.timeLeft == 3
+  and scanned.tiers[3].size == 200 and scanned.tiers[4].price == 150 and scanned.tiers[4].size == 5,
+  "seul le dernier scan est conserve, paliers tries et separes par temps restant")
+ok(d and d.scans == 2 and d.price == 120 and d.stock == 210, "resume journalier : 2 scans, prix min et stock max du jour")
+ok(#M.Report(902).tiers == 0 and M.Report(902).daily[TODAY] == nil, "objet sans palier ignore")
+ok(#M.Report(901).tiers == 0 and M.Report(901).daily[TODAY].scans == 1, "objet absent du dernier scan : pas de palier")
+ok(scanned.estimatedSalesPerDay == nil, "pas encore de ventes estimees")
+M.Ingest({ [900] = { tier(99, 1, 1, 3) } }, time() + 30 * 86400)
+ok(M.Report(900).daily[TODAY] == nil and M.Report(900).daily[TODAY + 30].scans == 1, "resume journalier limite a 21 jours")
+local status = M.Status()
+ok(status.items == 1 and status.time == time() + 30 * 86400 and status.bytes > 0, "etat du dernier scan")
+VepIndustriesMarketDB = nil
+ok(#M.Report(900).tiers == 0 and M.Status() == nil, "sans donnees sauvegardees -> rien, sans erreur")
 
 -- real data: same verdicts as before the Market module
 local count, n = {}, 0
@@ -120,15 +146,24 @@ CreateFrame = function(kind, name)
   f.IsShown = function() return shown end
   f.Show = function() shown = true end
   f.Hide = function() shown = false end
+  f.SetScript = function(self, script, fn) if script == "OnEvent" then rawset(self, "onEvent", fn) end end
   frames[#frames + 1] = f
   return f
 end
-print = print
+local said = {}
+print = function(s) said[#said + 1] = s end
+local function lastSaid() return said[#said] or "" end
+local function fire(event, arg)
+  for _, f in ipairs(frames) do
+    local onEvent = rawget(f, "onEvent")
+    if onEvent then onEvent(f, event, arg) end
+  end
+end
 local okLoad, err = pcall(function()
-  local chunk = loadfile("../src/Probe.lua"); chunk("VepIndustriesMarket")
+  local chunk = loadfile("../src/Capture.lua"); chunk("VepIndustriesMarket")
   dofile("../src/UI.lua")
 end)
-ok(okLoad, "chargement Probe.lua + UI.lua " .. tostring(err))
+ok(okLoad, "chargement Capture.lua + UI.lua " .. tostring(err))
 ok(postCall ~= nil, "hook infobulle enregistre")
 local lines = {}
 local tip = GameTooltip
@@ -148,6 +183,98 @@ local okWin, e3 = pcall(function()
   SlashCmdList.VEPINDUSTRIESMARKET("tooltip"); SlashCmdList.VEPINDUSTRIESMARKET("tooltip")
 end)
 ok(okWin, "fenetre + commandes " .. tostring(e3))
+
+-- Auctionator adapter, with API doubles
+fire("ADDON_LOADED", "VepIndustriesMarket")
+fire("PLAYER_LOGIN")
+local full, incremental = LISTENERS["replicate_scan_complete"], LISTENERS["full_incremental_scan_complete"]
+ok(full and incremental and not lastSaid():find("réglé"), "branche sur les scans d'Auctionator, bien regle")
+SlashCmdList.VEPINDUSTRIESMARKET("status")
+ok(lastSaid():find("Aucun Scan complet"), "/vim status sans scan : " .. lastSaid())
+
+-- the reduced real scan, in the shape of Auctionator's ScanComplete data
+local data = {}
+for _, r in ipairs(FULLSCAN) do
+  for _ = 1, r[5] do
+    data[#data + 1] = { replicateInfo = { [3] = r[2], [10] = r[3], [17] = r[1] }, itemLink = "|Hitem:" .. r[1] .. "|h",
+      timeLeft = r[4] }
+  end
+end
+-- one game frame per queued timer, to see the scan spread over frames
+local nextFrame = {}
+C_Timer = { After = function(_, fn) nextFrame[#nextFrame + 1] = fn end }
+local function runFrames()
+  local n = 0
+  while #nextFrame > 0 do
+    n = n + 1
+    table.remove(nextFrame, 1)()
+  end
+  return n
+end
+local okScan, e4 = pcall(full.ReceiveEvent, full, "replicate_scan_complete", data)
+local early, started = M.Status(), lastSaid()
+full:ReceiveEvent("replicate_scan_complete", data)
+local busy = lastSaid()
+local spread = runFrames()
+ok(okScan and not early and started:find("en cours %(" .. #data .. " enchères%)") and busy:find("déjà en cours")
+  and spread > #data / 2000,
+  string.format("scan complet reel ingere sur %d images %s", spread, tostring(e4)))
+local checked = { -- itemID = tiers, price, stock, cheapest tier (price, size, count, timeLeft), counted by hand in the raw scan
+  [5500] = { 389, 811, 1517, { 811, 1, 3, 3 } },
+  [4306] = { 401, 194, 21599, { 194, 20, 1, 2 } },
+  [20746] = { 18, 1074, 604, { 1074, 1, 1, 3 } },
+}
+for id, e in pairs(checked) do
+  local r = M.Report(id)
+  local t, day = r.tiers[1] or {}, r.daily[TODAY] or {}
+  ok(#r.tiers == e[1] and day.price == e[2] and day.stock == e[3] and day.scans == 1 and t.price == e[4][1]
+    and t.size == e[4][2] and t.count == e[4][3] and t.timeLeft == e[4][4],
+    string.format("%d: %d paliers, prix min %s, stock %s", id, #r.tiers, tostring(day.price), tostring(day.stock)))
+end
+local mixed = {} -- 20746 at 1088 per unit: 161 auctions of one, 28 Short, 108 Long, 25 Very long
+for _, t in ipairs(M.Report(20746).tiers) do
+  if t.price == 1088 and t.size == 1 then mixed[t.timeLeft] = t.count end
+end
+ok(mixed[1] == 28 and mixed[3] == 108 and mixed[4] == 25 and not mixed[2], "palier reel separe par temps restant")
+local st = M.Status()
+local fullSize = st.bytes * FULLSCAN_TOTAL_ITEMS / FULLSCAN_ITEMS
+ok(st.realm == "PvE" and st.faction == "Horde", "scan rattache au royaume et a la faction")
+ok(st.items == FULLSCAN_ITEMS and fullSize < 1e6,
+  string.format("%d objets, %d Ko extrapoles a %d objets", st.items, math.floor(fullSize / 1000), FULLSCAN_TOTAL_ITEMS))
+SlashCmdList.VEPINDUSTRIESMARKET("status")
+ok(lastSaid():find(FULLSCAN_ITEMS .. " objets"), "/vim status : " .. lastSaid())
+
+-- /vim relire: the same scan read again from the client's memory counts as a second scan of the day
+C_AuctionHouse = {
+  GetNumReplicateItems = function() return #data end,
+  GetReplicateItemInfo = function(i) return table.unpack(data[i + 1].replicateInfo, 1, 17) end,
+  GetReplicateItemTimeLeft = function(i) return data[i + 1].timeLeft end,
+}
+SlashCmdList.VEPINDUSTRIESMARKET("relire"); runFrames()
+local again = M.Report(5500)
+ok(lastSaid():find(FULLSCAN_ITEMS .. " objets") and #again.tiers == 389 and again.daily[TODAY].scans == 2
+  and again.daily[TODAY].stock == 1517, "/vim relire : scan en memoire enregistre, 2 scans dans la journee")
+C_AuctionHouse.GetNumReplicateItems = function() return 0 end
+SlashCmdList.VEPINDUSTRIESMARKET("relire")
+ok(lastSaid():find("aucun Scan complet en mémoire"), "/vim relire sans scan en memoire")
+
+-- incremental scan: warned once
+local before = #said
+incremental:ReceiveEvent("full_incremental_scan_complete", {})
+incremental:ReceiveEvent("full_incremental_scan_complete", {})
+ok(#said == before + 1 and lastSaid():find("incrémental"), "scan incremental : un seul avertissement")
+
+-- Auctionator without autoscan or replicate mode: told at login
+AUCTIONATOR_CONFIG.autoscan_2 = false
+fire("PLAYER_LOGIN")
+ok(lastSaid():find("pas réglé") and lastSaid():find("Run autoscan"), "Auctionator mal regle : prevenu a la connexion")
+
+-- Auctionator not loaded
+Auctionator = nil
+local okNo, e5 = pcall(fire, "PLAYER_LOGIN")
+ok(okNo and lastSaid():find("Auctionator absent"), "sans Auctionator : message sans erreur " .. tostring(e5))
+Auctionator = auctionator
+print = out
 
 if fails > 0 then error(fails .. " echec(s)", 0) end
 print("TOUT OK")

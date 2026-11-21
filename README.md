@@ -1,9 +1,10 @@
 # VepIndustries Market
 
 Addon WoW Forever (interface 16001) par VepIndustries : tendance prix/stock des objets de l'hôtel des ventes, à partir de l'historique d'Auctionator.
+Chaque Scan complet d'Auctionator (mode replicate) est enregistré en forme compacte (dernier scan + résumé par objet et par jour, ~1 Mo).
 
 - Infobulle : `Tendance 7 j  Demande | Stable | Saturé  prix ±x %  stock ±y %  (n j)`
-- `/vim` : fenêtre graphique 21 jours (prix = ligne, stock = barres). `/vim item <lien>`, `/vim unpin`, `/vim tooltip`, `/vim scan`.
+- `/vim` : fenêtre graphique 21 jours (prix = ligne, stock = barres). `/vim item <lien>`, `/vim unpin`, `/vim tooltip`, `/vim status` (dernier Scan complet), `/vim relire` (développement : réenregistre le dernier Scan complet gardé en mémoire par le client, sans attendre les 15 min du serveur ; la mémoire est perdue à chaque `/reload`).
 
 ## Développement
 
@@ -21,7 +22,7 @@ Les tests ne prouvent pas le rendu en jeu : vérifier avec `/reload` après chaq
 ## Structure
 
 - `src/` : l'addon tel qu'il est copié dans le jeu (`@version@` remplacé dans le `.toc`)
-- `tests/` : `test.lua`, `fixtures/realdata.lua` (historique Auctionator réel exporté)
+- `tests/` : `test.lua`, `fixtures/realdata.lua` (historique Auctionator réel exporté), `fixtures/fullscan.lua` (un objet sur dix du Scan complet réel du 21/11)
 - `scripts/build.mjs` : deploy / release
 
 Git : gitflow, voir `docs/agents/git-workflow.md`.
