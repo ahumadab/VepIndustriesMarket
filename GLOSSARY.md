@@ -48,6 +48,11 @@ Nombre d'unités d'un objet probablement achetées entre deux scans complets, d�
 _Avoid_: Sale rate, ventes, demande
 _Code_: `estimatedSales` (`estimatedSalesPerDay` ramené à un jour)
 
+**Fiable**:
+Se dit des ventes estimées d'un objet quand au moins deux jours de la fenêtre ont une comparaison de scans complets (donc au moins trois scans), et d'un jour quand il est dans la fenêtre d'un objet fiable. Non fiables, elles sont grisées et le verdict se fonde sur la tendance.
+_Avoid_: Sûr, confiance (sauf dans le code)
+_Code_: `confidence = "high"` pour l'objet, `reliable` pour un jour du résumé journalier
+
 **Verdict**:
 Classement d'un objet en Demande, Stable ou Saturé. Il se fonde sur les ventes estimées quand il y en a, sinon sur la tendance.
 _Avoid_: Statut, note, score

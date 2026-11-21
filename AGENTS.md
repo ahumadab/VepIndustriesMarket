@@ -5,7 +5,7 @@ Addon World of Warcraft (serveur WoW Forever, interface 16001, API moderne `C_Au
 ## Règles
 
 - `src/` est la seule source. Ne jamais éditer `AddOns/VepIndustriesMarket` dans le dossier du jeu : passer par `npm run deploy`.
-- `npm test` doit passer avant tout deploy (le script le garantit). Les tests (Fengari + doublures de l'API WoW) ne prouvent pas le rendu en jeu : faire valider par Boris avec `/reload`.
+- `npm test` doit passer avant tout deploy (le script le garantit). Les tests (Fengari + doublures de l'API WoW) ne prouvent pas le rendu en jeu : faire valider par Boris avec `/reload`, en désignant l'objet par son itemID (`/vim item 4306`) : aucun nom d'objet n'est disponible hors du jeu.
 - Les données réelles déjà enregistrées servent de banc d'essai : la logique se teste sur `tests/fixtures/` (historique Auctionator, Scans complets réels ; `npm run fixture` y ajoute ceux des SavedVariables et de leur `.bak`, la sauvegarde précédente), et la validation en jeu porte sur le rendu, juste après `/reload`, avec les données déjà sauvegardées. Un nouveau Scan complet ne se demande que pour une donnée qu'aucune sauvegarde ne contient encore, une seule fois, puis elle devient une fixture.
 - Lua du jeu : 5.1, Fengari : 5.3. Arrondir avant `%d`/`%x` dans `string.format`.
 - Textes visibles en jeu : français avec accents. Code et commentaires : anglais.
