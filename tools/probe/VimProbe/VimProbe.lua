@@ -9,10 +9,12 @@ local DURATION, TICKS = 20, 100 -- then TICKS tries over DURATION seconds: 1 250
 local LATE = 3                  -- seconds left for the last messages to come back before the summary
 local COMBAT_TRY = 5            -- seconds between two sends during a fight in an instance
 
--- Whispering the bare name to self answered "No player named ..." on Forever: use Name-Realm.
+-- Forever realms have no name (GetNormalizedRealmName answers ""); UnitName's second return is the surname, and a
+-- whisper reaches "First-Surname" only: the bare first name answered "No player named ..." (measured 22/11).
 local function me()
-  local realm = GetNormalizedRealmName()
-  return realm and (UnitName("player") .. "-" .. realm) or UnitName("player")
+  local name, surname = UnitName("player")
+  if type(surname) == "string" and surname ~= "" then return name .. "-" .. surname end
+  return name
 end
 
 local function safe(v)
@@ -76,9 +78,9 @@ local function rate(channel, target)
     if try() == 0 then later = later + 1 end
     if tick < TICKS then return end
     C_Timer.After(LATE, function()
-      log("débit %s%s (%s, blocage %s) : %d/%d acceptés d'un coup (codes %s), puis %d/%d en %d s (%.1f/s) ; refus : %s ; reçus %d/%d",
+      log("débit %s%s (%s, blocage %s) : %d/%d acceptés d'un coup (codes %s), puis %d/%d en %d s (%.1f/s) ; refus : %s ; reçus %d/%d, expéditeur lu « %s »",
         channel, target and (" vers " .. target) or "", where(), lockdown(), burst, BURST, table.concat(codes, " "),
-        later, TICKS, DURATION, later / DURATION, tally(refused), run.received, BURST + TICKS)
+        later, TICKS, DURATION, later / DURATION, tally(refused), run.received, BURST + TICKS, tostring(run.sender))
       run = nil
     end)
   end, TICKS)
@@ -148,12 +150,15 @@ for _, e in ipairs({ "ADDON_LOADED", "CHAT_MSG_ADDON", "CHAT_MSG_SYSTEM", "ENCOU
   "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
   frame:RegisterEvent(e)
 end
-frame:SetScript("OnEvent", function(_, event, a, b)
+frame:SetScript("OnEvent", function(_, event, a, b, _, d)
   if event == "ADDON_LOADED" and a == "VimProbe" then
     VimProbeDB = VimProbeDB or {}
     VimProbeDB.log = VimProbeDB.log or {}
   elseif event == "CHAT_MSG_ADDON" then
-    if run and safe(a) == PREFIX then run.received = run.received + 1 end
+    if run and safe(a) == PREFIX then
+      run.received = run.received + 1
+      run.sender = safe(d) -- the sender's name form, the one a reply has to whisper
+    end
   elseif event == "CHAT_MSG_SYSTEM" then
     if system then table.insert(system, tostring(safe(a))) end
   elseif event == "ENCOUNTER_START" then
