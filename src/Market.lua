@@ -16,6 +16,8 @@ M.WINDOW = T.WINDOW
 -- saturated above SATURATED_DAYS (stock left without any sale included), stable between.
 -- ponytail: provisional, picked on one evening of scans (2026-11-21); calibrate with Boris on 3 days of scans (#7)
 M.DEMAND_DAYS, M.SATURATED_DAYS = 2, 7
+-- compared time over the window below which estimated sales are scarce: too little to tell, even "0 sold"
+M.MIN_SALES_SECONDS = 3600
 -- daily summary kept, the span of the /vim window: ~170 KB per day of scans, ~55 KB more with estimated sales,
 -- ~5.6 MB in all after 21 days (accepted)
 local KEEP_DAYS = 21
@@ -293,7 +295,9 @@ end
 -- by Tranche into the estimated sales of the daily summary. A scan
 -- without any auction is ignored; one less than MIN_GAP newer, or holding the same data (/vim relire), is not
 -- compared and keeps the stored scan's time, so that the next comparison spans the real time.
--- true when it recorded a Comparison.
+-- Returns true, nil, the seconds compared when it recorded a Comparison; otherwise false, the reason ("first": no
+-- stored scan, "otherHouse", "tooSoon": under MIN_GAP, "same": same data, "tooLate": over MAX_GAP) and the
+-- seconds since the stored scan (nil for "first" and "otherHouse"). nil when the scan is ignored (no auction).
 function M.Ingest(scan, now, realm, faction, author)
     local db, day, day0 = VepIndustriesMarketDB, T.Today(now), T.Day0()
     if not db or not day then return end
@@ -316,9 +320,16 @@ function M.Ingest(scan, now, realm, faction, author)
     db.author = db.author or author
     db.daily = db.daily or {}
     local prev, daily = db.fullScan, db.daily
-    local gap = prev and prev.realm == realm and prev.faction == faction and now - prev.time
-    if gap and (gap < MIN_GAP or sameItems(prev.items, items)) then now, gap = prev.time, nil end
-    if gap and gap > MAX_GAP then gap = nil end
+    local reason = not prev and "first" or (prev.realm ~= realm or prev.faction ~= faction) and "otherHouse" or nil
+    local elapsed = not reason and now - prev.time or nil
+    local gap = elapsed
+    if gap and sameItems(prev.items, items) then
+        reason, now, gap = "same", prev.time, nil
+    elseif gap and gap < MIN_GAP then
+        reason, now, gap = "tooSoon", prev.time, nil
+    elseif gap and gap > MAX_GAP then
+        reason, gap = "tooLate", nil
+    end
     local before, entries = gap and prev.items or {}, {}
     local function entry(id, sold, stock, price)
         entries[#entries + 1] = string.format("%d %s %d %s", id, sold and string.format("%d", sold) or "-", stock,
@@ -350,7 +361,17 @@ function M.Ingest(scan, now, realm, faction, author)
         if next(days) == nil then daily[id] = nil end
     end
     db.fullScan = { time = now, realm = realm, faction = faction, items = items }
-    return gap and true
+    if gap then return true, nil, gap end
+    return false, reason, elapsed
+end
+
+-- the server's least gap between two full scans
+local SERVER_GAP = 900
+
+-- first and last time a full scan would be compared with the stored one (Unix seconds), nil without one
+function M.NextScan()
+    local fs = VepIndustriesMarketDB and VepIndustriesMarketDB.fullScan
+    if fs then return fs.time + math.max(MIN_GAP, SERVER_GAP), fs.time + MAX_GAP end
 end
 
 -- { time, realm, faction, items, bytes } of the stored full scan (bytes: rough size on disk, daily summary and
@@ -389,7 +410,8 @@ end
 
 -- Daily summary of item `id`: ours alone without a data file. With one, up to the day it was generated, its estimated
 -- sales (every author's Comparisons it counts) and our Comparisons it doesn't count merged on top; after that day, ours,
--- which it counts none of. Prices and stocks: both the file's and those of our own full scans.
+-- which it counts none of. A day the file holds no sales for the item (absent, or no compared time: scans before the
+-- Sync script ran) keeps ours too. Prices and stocks: both the file's and those of our own full scans.
 -- ponytail: added, not averaged by Tranche with the counted ones (the file holds days only); ours start after the
 -- save the file answers, so share at most a Tranche or two with them. Tranches in the file if that double counts.
 local function dailyOf(db, id)
@@ -397,12 +419,14 @@ local function dailyOf(db, id)
     for d, v in pairs(db.daily and db.daily[id] or {}) do daily[d] = readDay(v) end
     local file = VepIndustriesMarketData
     if not file then return daily end
-    local fileDay = T.Today(file.generated or 0)
-    local function fromFile(d) return not (fileDay and d > fileDay) end
+    local fileDay, fileDaily = T.Today(file.generated or 0), file.daily and file.daily[id] or {}
+    local function fromFile(d)
+        return not (fileDay and d > fileDay) and fileDaily[d] ~= nil and readDay(fileDaily[d]).seconds > 0
+    end
     for d, e in pairs(daily) do
         if fromFile(d) then e.estimatedSales, e.seconds = 0, 0 end
     end
-    for d, v in pairs(file.daily and file.daily[id] or {}) do
+    for d, v in pairs(fileDaily) do
         local f, e = readDay(v), daily[d]
         if e and f.stock then
             e.price = e.price and f.price and math.min(e.price, f.price) or e.price or f.price
@@ -430,13 +454,14 @@ local function dailyOf(db, id)
 end
 
 -- { verdict, source, trend = { price, stock, days, age }, estimatedSalesPerDay, estimatedSalesDays (compared days in
--- the window), confidence, history, today, tiers, daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
+-- the window), estimatedSalesSeconds (compared time in the window), scarce, confidence, history, today, tiers, daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
 -- (source "trend"); the stock they are set against is the item's in the latest full scan, 0 when absent.
 -- price/stock: relative change of the latest day vs the median of the window; history: ascending { day, price, stock }
 -- tiers: the item in the latest full scan, by price, lot size, time left; daily: { [day] = { price, stock, scans,
--- estimatedSales, seconds, estimatedSalesPerDay, reliable } }, the last two on compared days only. estimatedSalesPerDay
+-- estimatedSales, seconds, estimatedSalesPerDay, reliable, scarce } }, the last three on compared days only. estimatedSalesPerDay
 -- over the window, nil before two compared scans; confidence "high" from 2 days of comparisons in the window (so at
--- least 3 scans), "low" below; a day is reliable when it is in the window of a "high" confidence.
+-- least 3 scans) and M.MIN_SALES_SECONDS compared, "low" below; scarce (item, or day of the daily summary) when some
+-- time was compared but less than M.MIN_SALES_SECONDS; a day is reliable when it is in the window of a "high" confidence.
 function M.Report(itemID)
     local hist = T.History(itemID) or {}
     local today = T.Today()
@@ -450,10 +475,12 @@ function M.Report(itemID)
             days, units, seconds = days + 1, units + daily[d].estimatedSales, seconds + daily[d].seconds
         end
     end
-    local perDay, reliable = seconds > 0 and units * 86400 / seconds or nil, days >= 2
+    local scarce = seconds > 0 and seconds < M.MIN_SALES_SECONDS
+    local perDay, reliable = seconds > 0 and units * 86400 / seconds or nil, days >= 2 and not scarce
     for d, e in pairs(daily) do
         if e.seconds > 0 then
             e.estimatedSalesPerDay, e.reliable = e.estimatedSales * 86400 / e.seconds, reliable and inWindow(d)
+            e.scarce = e.seconds < M.MIN_SALES_SECONDS
         end
     end
     local tiers, verdict, source = encoded and decode(encoded) or {}, r.verdict, "trend"
@@ -469,6 +496,8 @@ function M.Report(itemID)
         trend = { price = r.price, stock = r.stock, days = r.days, age = r.age },
         estimatedSalesPerDay = perDay,
         estimatedSalesDays = days,
+        estimatedSalesSeconds = seconds,
+        scarce = scarce,
         confidence = perDay and (reliable and "high" or "low") or nil,
         history = hist,
         today = today,

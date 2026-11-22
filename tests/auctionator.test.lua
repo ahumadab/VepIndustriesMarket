@@ -38,6 +38,8 @@ local spread = runFrames()
 ok(okScan and not early and started:find("en cours %(" .. #data .. " enchères%)") and busy:find("déjà en cours")
   and spread > #data / 2000,
   string.format("scan complet reel ingere sur %d images %s", spread, tostring(e4)))
+ok(lastSaid():find("premier scan, rien à comparer") and lastSaid():find("Prochain scan utile entre %d%d:%d%d et %d%d:%d%d"),
+  "fin de scan : resultat et plage du prochain scan utile " .. lastSaid())
 local checked = { -- itemID = tiers, price, stock, cheapest tier (price, size, count, timeLeft), counted by hand in the raw scan
   [5500] = { 389, 811, 1517, { 811, 1, 3, 3 } },
   [4306] = { 401, 194, 21599, { 194, 20, 1, 2 } },
@@ -71,7 +73,7 @@ C_AuctionHouse = {
 }
 SlashCmdList.VEPINDUSTRIESMARKET("relire"); runFrames()
 local again = M.Report(5500)
-ok(lastSaid():find(FULLSCAN_ITEMS .. " objets") and #again.tiers == 389 and again.daily[TODAY].scans == 2
+ok(lastSaid():find(FULLSCAN_ITEMS .. " objets, identique au précédent") and #again.tiers == 389 and again.daily[TODAY].scans == 2
   and again.daily[TODAY].stock == 1517, "/vim relire : scan en memoire enregistre, 2 scans dans la journee")
 C_AuctionHouse.GetNumReplicateItems = function() return 0 end
 SlashCmdList.VEPINDUSTRIESMARKET("relire")

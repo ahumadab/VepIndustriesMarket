@@ -64,7 +64,7 @@ _Avoid_: Sale rate, ventes, demande
 _Code_: `estimatedSales` (`estimatedSalesPerDay` ramené à un jour)
 
 **Fiable**:
-Se dit des ventes estimées d'un objet quand au moins deux jours de la fenêtre ont une comparaison de scans complets (donc au moins trois scans), et d'un jour quand il est dans la fenêtre d'un objet fiable. Non fiables, elles sont grisées et le verdict se fonde sur la tendance.
+Se dit des ventes estimées d'un objet quand au moins deux jours de la fenêtre ont une comparaison de scans complets (donc au moins trois scans) et qu'elles portent sur au moins une heure, et d'un jour quand il est dans la fenêtre d'un objet fiable. Non fiables, elles sont grisées et le verdict se fonde sur la tendance ; sous une heure comparée (sur la fenêtre, ou sur un jour), l'addon affiche « pas assez de scans » au lieu d'un nombre.
 _Avoid_: Sûr, confiance (sauf dans le code)
 _Code_: `confidence = "high"` pour l'objet, `reliable` pour un jour du résumé journalier
 

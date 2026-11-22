@@ -123,7 +123,8 @@ ok(near(rate(910), 48) and rate(917) == nil, "plus de 2 h d'ecart : pas compare"
 local t3 = t2 + 1200
 M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3, "PvE", "Horde", "Boris")
 ok(near(rate(917), 72), "enchere Medium disparue en 20 min : vendue")
-ok(near(rate(910), 36) and M.Report(910).confidence == "high", "2 jours, 3 scans compares : 2 vendues en 80 min, fiable")
+ok(near(rate(910), 36) and M.Report(910).confidence == "high" and not M.Report(910).scarce,
+  "2 jours, 3 scans compares : 2 vendues en 80 min, fiable")
 M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3 + 1800, "PvE", "Horde", "Boris")
 ok(near(rate(910), 36) and M.Status().time == t3, "meme scan relu : pas compare, garde son heure")
 M.Ingest({}, t3 + 2000, "PvE", "Horde", "Boris")
@@ -134,6 +135,30 @@ M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, t3 + 3600, "PvE", "Horde", "Boris")
 M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, t3 + 4000, "PvE", "Alliance", "Boris")
 ok(near(rate(910), 36), "autre faction : pas comparee")
 ok(rate(999999) == nil and M.Report(999999).confidence == nil, "objet sans scan complet : pas de ventes, sans erreur")
+
+-- what M.Ingest tells of each scan, and when the next one would be compared (M.NextScan)
+VepIndustriesMarketDB = {}
+local function said(...) return table.concat({ tostring(select(1, ...)), tostring(select(2, ...)), tostring(select(3, ...)) }, " ") end
+ok(M.NextScan() == nil, "sans scan : pas de prochain scan")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 5, 3) } }, t2, "PvE", "Horde", "Boris")) == "false first nil", "premier scan")
+local from, to = M.NextScan()
+ok(from == t2 + 900 and to == t2 + 7200, "prochain scan utile entre +15 min (serveur) et +2 h")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 4, 3) } }, t2 + 300, "PvE", "Horde", "Boris")) == "false tooSoon 300",
+  "moins de 10 min : raison et ecart")
+ok(M.NextScan() == t2 + 900, "scan trop proche : la plage reste celle du scan precedent")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 4, 3) } }, t2 + 1200, "PvE", "Horde", "Boris")) == "false same 1200",
+  "scan identique")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 3, 3) } }, t2 + 1500, "PvE", "Horde", "Boris")) == "true nil 1500",
+  "Comparaison : duree comparee")
+ok(M.NextScan() == t2 + 1500 + 900, "apres une Comparaison : plage depuis ce scan")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 2, 3) } }, t2 + 1500 + 3 * 3600, "PvE", "Horde", "Boris"))
+  == "false tooLate 10800", "plus de 2 h : raison et ecart")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 1, 3) } }, t2 + 4 * 3600 + 1500, "PvE", "Alliance", "Boris"))
+  == "false otherHouse nil", "autre hotel des ventes")
+ok(M.Ingest({}, t2 + 5 * 3600, "PvE", "Horde", "Boris") == nil, "scan vide : nil")
+local few = M.Report(944)
+ok(few.scarce and few.estimatedSalesSeconds == 1500 and few.confidence == "low" and few.source == "trend"
+  and few.daily[TODAY].scarce, "25 min comparees en tout : pas assez de scans, verdict de la tendance")
 
 -- a Comparison over midnight: its sales split between both days, prorata of the time on each
 VepIndustriesMarketDB = {}
@@ -173,6 +198,19 @@ ok(near(shared[TODAY].estimatedSales, 7) and shared[TODAY].seconds == 5400 and s
   and shared[TODAY].stock == 12, "fichier de donnees : nos Comparaisons comptees une seule fois, les autres ajoutees")
 ok(shared[TODAY - 3].estimatedSales == 4 and shared[TODAY - 3].seconds == 1800 and shared[TODAY - 3].price == 80,
   "fichier de donnees : jour d'un ami seul")
+-- a day the file holds no sales for (scans before the Sync script, their Comparisons dropped since) keeps ours:
+-- the real case of Runecloth on 2026-11-22, 1 037 units over 7 970 s the day before the file's only day
+VepIndustriesMarketDB.daily[942][TODAY - 1] = "500 22006 10 1037 7970"
+VepIndustriesMarketDB.daily[942][TODAY - 2] = "500 20000 2 5 1200"
+VepIndustriesMarketData.daily[942][TODAY - 2] = "450 21000 1" -- price and stock only, no compared time
+local before = M.Report(942).daily
+ok(before[TODAY - 1].estimatedSales == 1037 and before[TODAY - 1].seconds == 7970,
+  "fichier de donnees sans ce jour : nos ventes gardees")
+ok(before[TODAY - 2].estimatedSales == 5 and before[TODAY - 2].seconds == 1200 and before[TODAY - 2].price == 450,
+  "fichier de donnees sans ventes ce jour : nos ventes gardees, son prix pris")
+ok(near(before[TODAY].estimatedSales, 7) and before[TODAY].seconds == 5400, "jour du fichier : inchange")
+VepIndustriesMarketDB.daily[942][TODAY - 1], VepIndustriesMarketDB.daily[942][TODAY - 2] = nil, nil
+VepIndustriesMarketData.daily[942][TODAY - 2] = nil
 ok(M.StaleDays() == nil, "fichier de donnees recent : Script de synchro en marche")
 VepIndustriesMarketData.generated = t2 - 4 * 86400
 ok(M.StaleDays() == 4, "fichier de donnees vieux de 4 jours, scan plus recent : Script de synchro arrete")
