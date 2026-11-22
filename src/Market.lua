@@ -17,8 +17,8 @@ M.DEMAND_DAYS, M.SATURATED_DAYS = 2, 7
 -- daily summary kept, the span of the /vim window: ~170 KB per day of scans, ~55 KB more with estimated sales,
 -- ~5.6 MB in all after 21 days (accepted)
 local KEEP_DAYS = 21
--- Comparisons kept until the VPS counts them (#21; a day at most until then), the MAX_COMPARISONS latest only
--- ponytail: count cap for the size of the save, drops uncounted ones past 6 h of scans; drop counted ones first with #21
+-- Comparisons kept until the VPS counts them (#23; a day at most until then), the MAX_COMPARISONS latest only
+-- ponytail: count cap for the size of the save, drops uncounted ones past 6 h of scans; drop counted ones first with #23
 M.MAX_COMPARISONS = 24
 local KEEP_COMPARISONS = 86400
 -- Tranche: a fixed half hour of the day, unit of the merge of Comparisons
