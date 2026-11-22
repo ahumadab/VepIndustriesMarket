@@ -115,6 +115,8 @@ f:SetScript("OnEvent", function(_, event, arg)
         for _ in pairs(file and file.daily or {}) do items = items + 1 end
         -- the file loaded, if any, for npm run report
         VepIndustriesMarketDB.dataFile = file and { generated = file.generated, items = items } or nil
+        -- kept across sessions: until the auction house opens, the in-game exchange's data file time (Exchange.lua)
+        VepIndustriesMarketDB.dataGenerated = file and file.generated or VepIndustriesMarketDB.dataGenerated
         local days = M.StaleDays()
         if days then
             GM.Say(string.format("les données partagées n'ont pas été renouvelées depuis %d jours : réinstalle le "

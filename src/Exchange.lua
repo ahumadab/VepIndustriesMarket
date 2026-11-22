@@ -1,6 +1,7 @@
 -- VepIndustriesMarket exchange: guild members' addons share their Comparisons in game, by addon messages (#24).
--- - Announce, on GUILD, at login and after every new Comparison (ours or received): "A <generated> <finish>", the time
---   of our data file (0 without one) and the end of our latest Comparison.
+-- - Announce, on GUILD, at login, after each of our Comparisons, and once a row of received ones has settled:
+--   "A <generated> <finish>", the time of our data file (0 without one) and the end of our latest Comparison. NORMAL
+--   priority: it gets through a transfer of ours in BULK.
 -- - Who hears it and may give or take whispers back its inventory, payload "W": "<ask> <generated>", then a line per
 --   Comparison it knows that ends after its data file ("author start", see Market.Id), and one per Comparison it got
 --   part of from that player ("author start chunks").
@@ -29,7 +30,9 @@ local RETRY = 2         -- seconds before a refused or locked chunk goes again (
 local INSTANCE_GAP = 1  -- seconds between two whispers in an instance
 local LOGIN_DELAY = 10  -- seconds after login before announcing (ChatThrottleLib holds back the first 5)
 local GONE_WAIT = 30    -- seconds a "No player named" line may follow our whisper
-local PASS = { [3] = true, [8] = true, [11] = true } -- refusals that pass: rate, channel rate, lockdown
+local SETTLE = 60       -- seconds without a new received Comparison before announcing them (a catch-up: once)
+-- refusals that pass: channel rate, lockdown (ChatThrottleLib sends again itself the rate one, 3)
+local PASS = { [8] = true, [11] = true }
 
 local function secret(v) return issecretvalue and issecretvalue(v) end
 -- a restricted answer counts as yes
@@ -40,8 +43,10 @@ local function me()
     local name, surname = UnitName("player")
     return whisperName(type(surname) == "string" and surname ~= "" and name .. " " .. surname or name)
 end
+-- our data file's time; before the auction house loads it, the one the previous session loaded
 local function generated()
-    return VepIndustriesMarketData and VepIndustriesMarketData.generated or 0
+    local file, db = VepIndustriesMarketData, VepIndustriesMarketDB
+    return file and file.generated or db and db.dataGenerated or 0
 end
 local function comparisons() return VepIndustriesMarketDB and VepIndustriesMarketDB.comparisons or {} end
 
@@ -94,10 +99,14 @@ function pump()
     ChatThrottleLib:SendAddonMessage("BULK", X.PREFIX, j.chunks[j.i], "WHISPER", j.to, nil, sent, j)
 end
 
--- whispers payload `text` to `to` from chunk `first` (1 by default), unless it is already on its way there
+-- whispers payload `text` to `to` from chunk `first` (1 by default); already on its way there, from `first` again
+-- (the other lost the chunks after it: a /reload)
 local function send(to, kind, key, text, first)
     for _, j in ipairs(jobs) do
-        if j.to == to and j.slot == kind .. key then return end
+        if j.to == to and j.slot == kind .. key then
+            j.i = math.min(first or 1, #j.chunks)
+            return
+        end
     end
     local chunks = X.Pack(kind, key, text)
     jobs[#jobs + 1] = { to = to, slot = kind .. key, chunks = chunks, i = math.min(first or 1, #chunks) }
@@ -125,12 +134,22 @@ local function latest()
     return finish
 end
 
+-- announces SETTLE s after the last of the Comparisons received in a row
+local settled
+local function settle()
+    if GetTime() < settled then return C_Timer.After(settled - GetTime(), settle) end
+    settled = nil
+    X.Announce()
+end
+
 local function handle(from, kind, key, text)
     if kind == "C" then
         local c = decodeComparison(text)
         if c and c.start and M.Id(c) == key then
-            GM.Run("échange", function()
-                if M.Receive(c, time()) then X.Announce() end
+            GM.Run("exchange", function()
+                if not M.Receive(c, time()) then return end
+                if not settled then C_Timer.After(SETTLE, settle) end
+                settled = GetTime() + SETTLE
             end)
         end
     elseif kind == "W" then
@@ -175,7 +194,6 @@ local function chunk(from, msg)
     if ok and type(text) == "string" then handle(from, kind, key, text) end
 end
 
--- announces on GUILD: after login, and after each Comparison recorded (ours or received)
 function X.Announce()
     if IsInGuild() then
         ChatThrottleLib:SendAddonMessage("NORMAL", X.PREFIX, string.format("A %d %d", generated(), latest()), "GUILD")

@@ -257,9 +257,20 @@ function M.Receive(c, now)
         return false
     end
     local gap = c.finish - c.start
-    if c.start % 1 ~= 0 or gap < MIN_GAP or gap > MAX_GAP or c.finish <= now - KEEP_COMPARISONS or M.Seen()[M.Id(c)]
-        or (("," .. c.items):gsub(",%d+ [%d-]+ %d+ [%d-]+", "")) ~= "" then
+    if c.start % 1 ~= 0 or c.finish % 1 ~= 0 or gap < MIN_GAP or gap > MAX_GAP or c.finish <= now - KEEP_COMPARISONS
+        or M.Seen()[M.Id(c)] or (("," .. c.items):gsub(",%d+ [%d-]+ %d+ [%d-]+", "")) ~= "" then
         return false
+    end
+    -- sharing a Tranche with a Comparison the cap dropped, its sales would add to that one's instead of averaging
+    local first, last = tranches(c, day0)
+    local kept = {}
+    for _, o in ipairs(db.comparisons or {}) do kept[M.Id(o)] = true end
+    for id, finish in pairs(db.seen or {}) do
+        local start = tonumber(id:match(" (%d+)$"))
+        if start and not kept[id] then
+            local a, b = tranches({ start = start, finish = finish }, day0)
+            if a <= last and b >= first then return false end
+        end
     end
     db.daily = db.daily or {}
     addComparison(db, { author = c.author, realm = c.realm, faction = c.faction, start = c.start, finish = c.finish,

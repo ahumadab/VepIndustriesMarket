@@ -260,6 +260,8 @@ kept = VepIndustriesMarketDB.comparisons
 ok(#kept == 2 and kept[1].author == "Boris" and kept[2].author == "Boris" and M.Seen()["Ami " .. t2] == t2 + 1800,
   "au-dela du plafond : Comparaisons des autres retirees avant les notres, gardees comme connues")
 ok(not M.Receive(friend, t2 + 3600), "Comparaison retiree par le plafond : pas reprise d'un ami")
+ok(not M.Receive({ author = "Tiers", realm = "PvE", faction = "Horde", start = t2 + 600, finish = t2 + 1500,
+  items = "943 1 6 100" }, t2 + 3600), "Comparaison recue sur la Tranche d'une Comparaison retiree : refusee (pas comptee deux fois)")
 M.MAX_COMPARISONS = cap
 
 -- verdict from reliable estimated sales: days the current stock lasts at that pace (provisional thresholds, #7)
@@ -768,9 +770,18 @@ local ours = VepIndustriesMarketDB
 VepIndustriesMarketDB, chat.outbox = {}, {}
 whisper(mineTexts, "Tiers Nom"); play(2)
 local got = VepIndustriesMarketDB.comparisons and VepIndustriesMarketDB.comparisons[1] or {}
+local early = guild()
+play(60)
 ok(got.author == "Boris" and got.start == t2 and got.finish == t2 + 919 and got.items == mine.items
-  and guild() == "A 0 " .. (t2 + 919), "echange : Comparaison reassemblee chez un autre, gardee puis annoncee")
+  and not early and guild() == "A 0 " .. (t2 + 919),
+  "echange : Comparaison reassemblee chez un autre, gardee, annoncee une minute apres la derniere recue")
 VepIndustriesMarketDB = ours
+-- before the auction house loads the data file, the time of the one the previous session loaded
+chat.outbox, VepIndustriesMarketDB.dataGenerated = {}, t2 - 600
+heard("A 0 " .. theirs.finish, "GUILD", "Ami Epice"); play(1)
+ok(payload(to("Ami-Epice", "W")) == "1 " .. (t2 - 600) .. "\n" .. MINE,
+  "echange : fichier de donnees pas encore charge, heure de celui de la session precedente")
+VepIndustriesMarketDB.dataGenerated = nil
 
 -- a transfer cut after 5 messages (the friend logged out): our next inventory tells it, the rest completes it
 chat.outbox = {}
@@ -779,7 +790,7 @@ heard("A 0 " .. theirs.finish, "GUILD", "Ami Epice"); play(1)
 local inv = payload(to("Ami-Epice", "W")) or ""
 ok(inv:find("\n" .. THEIRS .. " 5", 1, true), "echange : transfert interrompu, inventaire avec les morceaux recus " .. inv)
 chat.outbox = {}
-whisper(packed, "Ami Epice", 6); play(2)
+whisper(packed, "Ami Epice", 6); play(61)
 ok(#VepIndustriesMarketDB.comparisons == 2 and M.Seen()[THEIRS] == theirs.finish and guild() == "A 0 " .. theirs.finish,
   "echange : transfert repris, Comparaison gardee et annoncee (relais)")
 -- our side resumed: the friend got 20 messages of ours
@@ -788,6 +799,14 @@ whisper(X.Pack("W", "", "0 0\n" .. THEIRS .. "\n" .. MINE .. " 20"), "Ami Epice"
 sent = to("Ami-Epice", "C", MINE)
 ok(#sent > 0 and sent[1].i == 21 and sent[#sent].i == sent[1].n and #sent == sent[1].n - 20,
   "echange : notre envoi repris au 21e message")
+-- the friend reloaded during our transfer: its new inventory, without the chunks it lost, restarts it
+chat.outbox = {}
+whisper(X.Pack("W", "", "0 0\n" .. MINE), "Huit Nom"); play(3)
+local cut = #to("Huit-Nom", "C", THEIRS)
+chat.outbox = {}
+whisper(X.Pack("W", "", "0 0\n" .. MINE), "Huit Nom"); play(60)
+ok(cut > 0 and cut < #packed and payload(to("Huit-Nom", "C", THEIRS)) == X.Encode(theirs),
+  "echange : destinataire relance pendant l'envoi, envoi repris du debut")
 
 -- relay: a member who has none gets ours and the friend's; one whose data file is newer than ours, the friend's only
 chat.outbox = {}
@@ -832,8 +851,8 @@ local filter = chat.filters.CHAT_MSG_SYSTEM
 local hidden = filter and filter(nil, "CHAT_MSG_SYSTEM", ERR_CHAT_PLAYER_NOT_FOUND_S:format("Parti Loin"))
 local shown = filter and filter(nil, "CHAT_MSG_SYSTEM", ERR_CHAT_PLAYER_NOT_FOUND_S:format("Inconnu"))
 play(30)
-ok(before > 0 and hidden and not shown and #to("Parti-Loin") == before,
-  "echange : « No player named » filtre pour un destinataire parti, transfert arrete")
+ok(before > 0 and hidden and not shown and #to("Parti-Loin") <= before + 1 and #to("Parti-Loin") < #packed,
+  "echange : « No player named » filtre pour un destinataire parti, transfert arrete (sauf le message deja confie a ChatThrottleLib)")
 ok(not chat.error, "echange : aucune erreur de ChatThrottleLib " .. tostring(chat.error))
 print = out
 
