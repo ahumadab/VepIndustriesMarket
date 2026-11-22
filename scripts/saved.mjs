@@ -1,6 +1,7 @@
 // Reads the addon's SavedVariables: VepIndustriesMarket.lua and the game's previous save of it, .bak.
 // npm run fixture : writes each of their full scans to tests/fixtures/fullscan-<MMDD>-<HHMM>.lua (local time of the
-//                   scan), reduced to the items of fullscan.lua, so that tests compare consecutive real scans.
+//                   scan), reduced to the items of fullscan.lua, so that tests compare consecutive real scans; and,
+//                   once, the save's Comparisons to tests/fixtures/comparisons.lua, which tests/sync.cjs reads.
 // npm run report  : what the addon recorded since the previous save: estimated sales, the items selling most with
 //                   their stock and lowest price moves between the two saved scans, errors.
 // Game folder: env WOW_ADDONS, as for deploy; the first account holding VepIndustriesMarket.lua is read.
@@ -71,6 +72,18 @@ if (mode === 'fixture') {
       + '-- (npm run fixture). Same rows: { itemID, count (lot size), buyout (whole lot, copper), timeLeft, auctions }\n'
       + `${v}_TIME = ${scan.time}\n${v} = {\n${rows.join(',\n')},\n}\n`);
     console.log(`✓ ${rows.length} paliers de ${new Set(rows.map((r) => r.split(',')[0])).size} objets -> ${file}`);
+  }
+  // The Comparisons block verbatim, as the game laid it out, reduced to the same items: tests/sync.cjs reads it.
+  const file = 'tests/fixtures/comparisons.lua';
+  const block = readFileSync(saved, 'utf8')
+    .match(/\["comparisons"\] = \{\r?\n(?:\{\r?\n(?:\["\w+"\] = [^\r\n]*\r?\n)*\},?[^\r\n]*\r?\n)*\},?/);
+  if (existsSync(join(root, file))) console.log(`= ${file} existe déjà`);
+  else if (!block || !block[0].includes('["start"]')) console.log(`- aucune Comparaison dans ${saved}`);
+  else {
+    const reduced = block[0].replace(/\["items"\] = "([^"]*)"/g,
+      (_, items) => `["items"] = "${items.split(',').filter((e) => wanted.has(e.split(' ')[0])).join(',')}"`);
+    writeFileSync(join(root, file), reduced + '\n');
+    console.log(`✓ ${reduced.split('["start"]').length - 1} Comparaisons -> ${file}`);
   }
 } else {
   console.log(`Scan complet enregistré : ${new Date(current.time * 1000).toLocaleString('fr-FR')}`);

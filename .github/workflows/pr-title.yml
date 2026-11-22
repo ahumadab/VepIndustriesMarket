@@ -1,0 +1,16 @@
+name: PR title
+
+# GitHub squashes a PR under its title: it must pass the same check as a commit subject.
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/commit-subject.mjs "$TITLE"
+        env:
+          TITLE: ${{ github.event.pull_request.title }}

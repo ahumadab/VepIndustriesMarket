@@ -30,6 +30,20 @@ if (literals.length) {
   process.exit(1);
 }
 
+// The Sync script's files: Windows PowerShell 5.1 reads a .ps1 without BOM in the ANSI code page (accents broken),
+// and cmd misreads a .cmd without CRLF. .editorconfig and .gitattributes set both; this catches an editor that didn't.
+const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+const layout = readdirSync('../src').flatMap((f) => {
+  const bytes = readFileSync(`../src/${f}`);
+  if (f.endsWith('.ps1') && !bytes.subarray(0, 3).equals(BOM)) return [`src/${f} : BOM UTF-8 manquant`];
+  if (f.endsWith('.cmd') && /(^|[^\r])\n/.test(bytes.toString('latin1'))) return [`src/${f} : fin de ligne sans CR`];
+  return [];
+});
+if (layout.length) {
+  console.error('✗ fichiers du Script de synchro mal enregistrés :\n' + layout.join('\n'));
+  process.exit(1);
+}
+
 const L = lauxlib.luaL_newstate();
 lualib.luaL_openlibs(L);
 // merge-cases.json, shared with the server, handed to test.lua as the global MERGE_CASES (numeric keys as numbers)
