@@ -87,11 +87,25 @@ function GM.Reread()
     end)
 end
 
+-- The Sync script's data file lives in an addon of its own, loaded on demand: the game reads its file when it loads,
+-- so loading it when the auction house first opens catches a file written after the game started (#19).
+local DATA_ADDON, dataTried = ADDON .. "_Data", false
+
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_LOGIN")
+f:RegisterEvent("AUCTION_HOUSE_SHOW")
 f:SetScript("OnEvent", function(_, event, arg)
-    if event == "ADDON_LOADED" and arg == ADDON then
+    if event == "AUCTION_HOUSE_SHOW" then
+        if dataTried then return end -- once a session: the game loads an addon once
+        dataTried = true
+        C_AddOns.LoadAddOn(DATA_ADDON) -- false when missing (no Sync script): nothing to do
+        local days = M.StaleDays()
+        if days then
+            GM.Say(string.format("les données partagées n'ont pas été renouvelées depuis %d jours : réinstalle le "
+                .. "Script de synchro (double-clic sur installer.cmd, dans le dossier Interface\\AddOns\\%s).", days, ADDON))
+        end
+    elseif event == "ADDON_LOADED" and arg == ADDON then
         VepIndustriesMarketDB = VepIndustriesMarketDB or {}
         VepIndustriesMarketDB.errors = {}
         VepIndustriesMarketDB.snaps = nil -- raw probe snapshots of 0.1.0 (~14 MB each)

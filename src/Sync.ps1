@@ -1,7 +1,8 @@
 ﻿# Sync script (GLOSSARY.md): links the game's save to the VPS, run by a scheduled task every 15 minutes of the
 # Windows session. Windows PowerShell 5.1; it never downloads code.
 #   Sync.ps1 -Install : asks the friend's invitation code (Sync code) once, then creates the scheduled task, no admin.
-#   Sync.ps1          : when a save changed, sends its new Comparisons and writes the addon's data file, Data.lua.
+#   Sync.ps1          : when a save changed, sends its new Comparisons and writes the addon's data file, Data.lua of
+#                       the addon VepIndustriesMarket_Data, which the addon loads when the auction house opens.
 # Lives in <game>/Interface/AddOns/VepIndustriesMarket; its state (code, sent Comparisons, log) in
 # %LOCALAPPDATA%\VepIndustriesMarket, which outlives the addon's updates.
 param(
@@ -15,7 +16,7 @@ $ProgressPreference = 'SilentlyContinue' # Invoke-WebRequest's progress bar slow
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 'Tls12'
 
 $game = Split-Path (Split-Path (Split-Path $PSScriptRoot))
-$data = Join-Path $PSScriptRoot 'Data.lua'
+$data = Join-Path (Split-Path $PSScriptRoot) 'VepIndustriesMarket_Data\Data.lua'
 $state = Join-Path $env:LOCALAPPDATA 'VepIndustriesMarket'
 $config = Join-Path $state 'config.json'
 $sent = Join-Path $state 'sent.txt'

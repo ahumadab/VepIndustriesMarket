@@ -1,4 +1,5 @@
-// npm run deploy  : tests -> dist/VepIndustriesMarket (version "x.y.z-dev+sha") -> copied into the game AddOns folder
+// npm run deploy  : tests -> dist/VepIndustriesMarket and dist/VepIndustriesMarket_Data (version "x.y.z-dev+sha") ->
+//                   copied into the game AddOns folder
 // npm run release : same, with version "x.y.z", plus dist/VepIndustriesMarket-x.y.z.zip and git tag vx.y.z
 // Game folder: env WOW_ADDONS, default C:/Program Files (x86)/World of Warcraft/_forever_/Interface/AddOns
 import { execSync } from 'node:child_process';
@@ -32,28 +33,34 @@ if (mode === 'release') {
   version = `${version}-dev+${sha}`;
 }
 
-// 3. build dist/<ADDON>
-const out = join(root, 'dist', ADDON);
-rmSync(out, { recursive: true, force: true });
-mkdirSync(out, { recursive: true });
-for (const f of readdirSync(join(root, 'src'))) {
-  const src = join(root, 'src', f);
-  if (f.endsWith('.toc')) writeFileSync(join(out, f), readFileSync(src, 'utf8').replace('@version@', version));
-  else cpSync(src, join(out, f), { recursive: true });
-}
+// 3. build dist/<ADDON>, and dist/<ADDON>_Data from src/<ADDON>_Data: the addon loaded on demand that holds the Sync
+// script's data file (its Data.lua, written by the script only)
+const DATA = `${ADDON}_Data`;
+const build = (from, name) => {
+  const out = join(root, 'dist', name);
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  for (const f of readdirSync(from).filter((f) => f !== DATA)) {
+    const src = join(from, f);
+    if (f.endsWith('.toc')) writeFileSync(join(out, f), readFileSync(src, 'utf8').replace('@version@', version));
+    else cpSync(src, join(out, f), { recursive: true });
+  }
+};
+build(join(root, 'src'), ADDON);
+build(join(root, 'src', DATA), DATA);
 
-// 4. copy into the game
+// 4. copy into the game, keeping the data file the Sync script wrote; a new addon folder shows in the game only after
+// a restart, not on /reload
 if (!existsSync(addons)) fail(`dossier AddOns introuvable : ${addons} (variable WOW_ADDONS)`);
-const target = join(addons, ADDON);
-rmSync(target, { recursive: true, force: true });
-cpSync(out, target, { recursive: true });
-console.log(`✓ ${ADDON} ${version} -> ${target}  (/reload en jeu)`);
+rmSync(join(addons, ADDON), { recursive: true, force: true });
+for (const name of [ADDON, DATA]) cpSync(join(root, 'dist', name), join(addons, name), { recursive: true });
+console.log(`✓ ${ADDON} ${version} -> ${addons}  (/reload en jeu)`);
 
 // 5. release artefacts
 if (mode === 'release') {
   const zip = join(root, 'dist', `${ADDON}-${version}.zip`);
   rmSync(zip, { force: true });
-  execSync(`tar -a -c -f "${zip}" ${ADDON}`, { cwd: join(root, 'dist'), stdio: 'inherit' });
+  execSync(`tar -a -c -f "${zip}" ${ADDON} ${DATA}`, { cwd: join(root, 'dist'), stdio: 'inherit' });
   sh(`git tag -a v${version} -m "${ADDON} ${version}"`);
   console.log(`✓ ${zip}\n✓ tag v${version} (git push --tags pour publier)`);
 }

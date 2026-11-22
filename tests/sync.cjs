@@ -21,8 +21,9 @@ const addon = join(root, 'Interface', 'AddOns', 'VepIndustriesMarket');
 const savedDir = join(root, 'WTF', 'Account', '123#1', 'SavedVariables');
 const saved = join(savedDir, 'VepIndustriesMarket.lua');
 const state = join(root, 'LocalAppData', 'VepIndustriesMarket');
-const data = join(addon, 'Data.lua');
+const data = join(addon, '..', 'VepIndustriesMarket_Data', 'Data.lua');
 mkdirSync(addon, { recursive: true });
+mkdirSync(join(data, '..'));
 mkdirSync(savedDir, { recursive: true });
 copyFileSync(join(__dirname, '..', 'src', 'Sync.ps1'), join(addon, 'Sync.ps1'));
 
