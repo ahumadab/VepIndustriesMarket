@@ -67,7 +67,9 @@ console.log(`✓ ${ADDON} ${version} -> ${addons}  `
 if (mode === 'release') {
   const zip = join(root, 'dist', `${ADDON}-${version}.zip`);
   rmSync(zip, { force: true });
-  execSync(`tar -a -c -f "${zip}" ${ADDON} ${DATA}`, { cwd: join(root, 'dist'), stdio: 'inherit' });
+  // Windows' own bsdtar writes the zip; Git Bash's GNU tar, first in its PATH, takes "C:" for a host and has no zip
+  const tar = process.platform === 'win32' ? `"${join(process.env.SystemRoot, 'System32', 'tar.exe')}"` : 'tar';
+  execSync(`${tar} -a -c -f "${zip}" ${ADDON} ${DATA}`, { cwd: join(root, 'dist'), stdio: 'inherit' });
   sh(`git tag -a v${version} -m "${ADDON} ${version}"`);
   console.log(`✓ ${zip}\n✓ tag v${version} (git push --tags pour publier)`);
 }
