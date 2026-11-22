@@ -16,7 +16,7 @@ const fail = (msg) => { console.error(`✗ ${msg}`); process.exit(1); };
 if (!['deploy', 'release'].includes(mode)) fail('usage: build.mjs deploy|release');
 
 // 1. tests gate everything
-try { execSync('node tests/run.cjs', { cwd: root, stdio: 'inherit' }); } catch { fail('tests en échec, rien n\'est déployé'); }
+try { execSync('npm test', { cwd: root, stdio: 'inherit' }); } catch { fail('tests en échec, rien n\'est déployé'); }
 
 // 2. version
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
