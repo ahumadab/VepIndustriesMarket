@@ -31,6 +31,8 @@ if (mode === 'install') {
   const saved = readdirSync(accounts).map((a) => join(accounts, a, 'SavedVariables', 'VimProbe.lua')).find(existsSync);
   if (!saved) fail(`aucun VimProbe.lua sous ${accounts} : /reload ou déconnexion d'abord`);
   for (const [, line] of readFileSync(saved, 'utf8').matchAll(/^\s*"(.*)",(?: -- \[\d+\])?\r?$/gm)) console.log(line);
+  const data = join(addons, 'VimProbeLod', 'Data.lua');
+  if (existsSync(data)) console.log(`Data.lua sur le disque : ${readFileSync(data, 'utf8').trim()}`);
 } else if (mode === 'remove') {
   for (const a of ADDONS) rmSync(join(addons, a), { recursive: true, force: true });
   console.log('✓ VimProbe et VimProbeLod retirés');

@@ -1,9 +1,11 @@
 -- One-off in-game measurements for ticket #19. Every result is printed and kept in VimProbeDB.log,
 -- read back after logout with `npm run probe results`. Throwaway: removed with `npm run probe remove`.
 local PREFIX = "VIMPROBE"
+local FIGHT_PREFIX = "VIMPROBEC"  -- fight sends keep their own allowance and never count as rate receptions
 local PAYLOAD = 250             -- bytes per message, as the future transfer will use
-local BURST = 12                -- sent at once: the wiki announces an allowance of 10 per prefix
-local DURATION, TICKS = 20, 100 -- then TICKS tries over DURATION seconds (1 250 bytes/s, under ChatThrottleLib's burst)
+local BURST = 12                -- sent at once: the wiki announces an allowance of 10 per prefix (3 000 bytes,
+                                -- under ChatThrottleLib's BURST of 4 000)
+local DURATION, TICKS = 20, 100 -- then TICKS tries over DURATION seconds: 1 250 bytes/s for 20 s
 local LATE = 3                  -- seconds left for the last messages to come back before the summary
 local COMBAT_TRY = 5            -- seconds between two sends during a fight in an instance
 
@@ -31,8 +33,11 @@ local function lockdown()
   return tostring(safe(C_ChatInfo.InChatMessagingLockdown()))
 end
 
-local function send(text, channel, target)
-  local code = safe(C_ChatInfo.SendAddonMessage(PREFIX, text, channel, target))
+-- The result code, 0 on success; "erreur" when the call raised (a blocked call may raise instead of answering 11).
+local function send(text, channel, target, prefix)
+  local ok, code = pcall(C_ChatInfo.SendAddonMessage, prefix or PREFIX, text, channel, target)
+  if not ok then return "erreur" end
+  code = safe(code)
   if code == true then return 0 end -- older clients answered true for a success
   return code
 end
@@ -98,7 +103,7 @@ local function startFight(boss)
   fight = { boss = boss, tries = 0, refused = {}, locked = {} }
   local function try()
     fight.tries = fight.tries + 1
-    local code = send("combat", "WHISPER", me)
+    local code = send("combat", "WHISPER", me, FIGHT_PREFIX)
     if code ~= 0 then fight.refused[tostring(code)] = (fight.refused[tostring(code)] or 0) + 1 end
     fight.locked[lockdown()] = true
   end
@@ -144,29 +149,32 @@ frame:SetScript("OnEvent", function(_, event, a, b)
     VimProbeDB = VimProbeDB or {}
     VimProbeDB.log = VimProbeDB.log or {}
   elseif event == "CHAT_MSG_ADDON" then
-    if a == PREFIX and run then run.received = run.received + 1 end
+    if run and safe(a) == PREFIX then run.received = run.received + 1 end
   elseif event == "CHAT_MSG_SYSTEM" then
     if system then table.insert(system, tostring(safe(a))) end
   elseif event == "ENCOUNTER_START" then
     startFight(tostring(safe(b)))
   elseif event == "PLAYER_REGEN_DISABLED" then
     if safe(IsInInstance()) == true then startFight(nil) end
-  elseif event == "ENCOUNTER_END" or event == "PLAYER_REGEN_ENABLED" then
+  elseif event == "ENCOUNTER_END" then
     endFight()
+  elseif event == "PLAYER_REGEN_ENABLED" then
+    if fight and not fight.boss then endFight() end -- a boss fight ends with ENCOUNTER_END only
   end
 end)
 C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
+C_ChatInfo.RegisterAddonMessagePrefix(FIGHT_PREFIX)
 
 SLASH_VIMPROBE1 = "/vimprobe"
 SlashCmdList.VIMPROBE = function(msg)
   local cmd, arg = msg:match("^(%S*)%s*(.-)$")
   if cmd == "guilde" then rate("GUILD")
   elseif cmd == "chuchot" then rate("WHISPER", arg ~= "" and arg or me)
-  elseif cmd == "absent" and arg ~= "" then absent(arg)
+  elseif cmd == "absent" and arg ~= "" then absent(arg) -- a real character, offline
   elseif cmd == "api" then api()
   elseif cmd == "lod" then lod()
   else
-    print("|cff33ccffVIM Probe|r /vimprobe guilde | chuchot [Nom] | absent Nom | api | lod"
+    print("|cff33ccffVIM Probe|r /vimprobe guilde | chuchot [Nom] | absent NomDUnPersoHorsLigne | api | lod"
       .. " — les combats en instance sont mesurés d'eux-mêmes")
   end
 end
