@@ -39,6 +39,9 @@ ok(lines[4] and lines[4]:find("^|cffffd100Ventes estimées 7 j|r || |cff4cff4cDe
 VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily, VepIndustriesMarketDB.comparisons = nil, nil, nil
 local slow = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 2.5 })
 ok(slow:find("≈ 2,5/jour", 1, true), "infobulle : decimale sous 10/jour " .. slow)
+local scarce = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 0, scarce = true })
+ok(scarce:find("pas assez de scans", 1, true) and not scarce:find("≈", 1, true),
+  "infobulle : moins d'une heure comparee -> pas assez de scans, pas de 0/jour " .. scarce)
 local okWin, e3 = pcall(function()
   SlashCmdList.VEPINDUSTRIESMARKET("")
   VepIndustriesMarket.ShowItem(14048, true)
@@ -101,7 +104,8 @@ ok(yesterday:find("il y a 1 j", 1, true) and yesterday:find("Prix minimum || 90|
   "survol d'hier : prix, stock et ventes estimees fiables\n" .. yesterday)
 ok(older:find("Ventes estimées", 1, true) and not older:find("Stock", 1, true),
   "survol sans historique Auctionator : ventes estimees seules\n" .. older)
-ok(oldest:find("pas fiable", 1, true), "survol d'un jour hors fenetre : ventes estimees non fiables\n" .. oldest)
+ok(oldest:find("pas assez de scans", 1, true) and not oldest:find("≈", 1, true),
+  "survol d'un jour de 15 min comparees : pas assez de scans\n" .. oldest)
 ok(empty:find("Aucune donnée", 1, true), "survol d'un jour sans donnees\n" .. empty)
 VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily, VepIndustriesMarketDB.comparisons = nil, nil, nil
 

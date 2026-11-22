@@ -45,7 +45,9 @@ function GM.TrendText(r)
     end
     txt = txt .. string.format(" %s(%d j)|r", hex(TEXT.muted), (sales and r.estimatedSalesDays or trend.days) or 0)
     local perDay = r.estimatedSalesPerDay
-    if perDay then -- grey while not reliable
+    if r.scarce then -- a few minutes compared: "0/jour" would read as "does not sell"
+        txt = txt .. "  " .. hex(TEXT.muted) .. "pas assez de scans|r"
+    elseif perDay then -- grey while not reliable
         txt = txt .. "  " .. hex(r.confidence == "high" and TEXT.bright or TEXT.muted) .. "≈ " .. perDayText(perDay)
             .. "/jour|r"
     end
@@ -179,7 +181,10 @@ local function showDay(col)
     local h, d = view.hist[day] or {}, view.daily[day] or {}
     if h.price then GameTooltip:AddDoubleLine("Prix minimum", money(h.price), PRICE[1], PRICE[2], PRICE[3], 1, 1, 1) end
     if h.stock then GameTooltip:AddDoubleLine("Stock", tostring(h.stock), STOCK[1], STOCK[2], STOCK[3], 1, 1, 1) end
-    if d.estimatedSalesPerDay then
+    if d.scarce then
+        GameTooltip:AddDoubleLine("Ventes estimées", hex(TEXT.muted) .. "pas assez de scans|r",
+            SALES[1], SALES[2], SALES[3])
+    elseif d.estimatedSalesPerDay then
         GameTooltip:AddDoubleLine("Ventes estimées", hex(d.reliable and TEXT.bright or TEXT.muted) .. "≈ "
             .. perDayText(d.estimatedSalesPerDay) .. "/jour" .. (d.reliable and "" or " (pas fiable)") .. "|r",
             SALES[1], SALES[2], SALES[3])

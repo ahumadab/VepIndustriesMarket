@@ -123,7 +123,8 @@ ok(near(rate(910), 48) and rate(917) == nil, "plus de 2 h d'ecart : pas compare"
 local t3 = t2 + 1200
 M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3, "PvE", "Horde", "Boris")
 ok(near(rate(917), 72), "enchere Medium disparue en 20 min : vendue")
-ok(near(rate(910), 36) and M.Report(910).confidence == "high", "2 jours, 3 scans compares : 2 vendues en 80 min, fiable")
+ok(near(rate(910), 36) and M.Report(910).confidence == "high" and not M.Report(910).scarce,
+  "2 jours, 3 scans compares : 2 vendues en 80 min, fiable")
 M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3 + 1800, "PvE", "Horde", "Boris")
 ok(near(rate(910), 36) and M.Status().time == t3, "meme scan relu : pas compare, garde son heure")
 M.Ingest({}, t3 + 2000, "PvE", "Horde", "Boris")
@@ -155,6 +156,9 @@ ok(said(M.Ingest({ [944] = { tier(100, 1, 2, 3) } }, t2 + 1500 + 3 * 3600, "PvE"
 ok(said(M.Ingest({ [944] = { tier(100, 1, 1, 3) } }, t2 + 4 * 3600 + 1500, "PvE", "Alliance", "Boris"))
   == "false otherHouse nil", "autre hotel des ventes")
 ok(M.Ingest({}, t2 + 5 * 3600, "PvE", "Horde", "Boris") == nil, "scan vide : nil")
+local few = M.Report(944)
+ok(few.scarce and few.estimatedSalesSeconds == 1500 and few.confidence == "low" and few.source == "trend"
+  and few.daily[TODAY].scarce, "25 min comparees en tout : pas assez de scans, verdict de la tendance")
 
 -- a Comparison over midnight: its sales split between both days, prorata of the time on each
 VepIndustriesMarketDB = {}

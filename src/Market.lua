@@ -16,6 +16,8 @@ M.WINDOW = T.WINDOW
 -- saturated above SATURATED_DAYS (stock left without any sale included), stable between.
 -- ponytail: provisional, picked on one evening of scans (2026-11-21); calibrate with Boris on 3 days of scans (#7)
 M.DEMAND_DAYS, M.SATURATED_DAYS = 2, 7
+-- compared time over the window below which estimated sales are scarce: too little to tell, even "0 sold"
+M.MIN_SALES_SECONDS = 3600
 -- daily summary kept, the span of the /vim window: ~170 KB per day of scans, ~55 KB more with estimated sales,
 -- ~5.6 MB in all after 21 days (accepted)
 local KEEP_DAYS = 21
@@ -452,13 +454,14 @@ local function dailyOf(db, id)
 end
 
 -- { verdict, source, trend = { price, stock, days, age }, estimatedSalesPerDay, estimatedSalesDays (compared days in
--- the window), confidence, history, today, tiers, daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
+-- the window), estimatedSalesSeconds (compared time in the window), scarce, confidence, history, today, tiers, daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
 -- (source "trend"); the stock they are set against is the item's in the latest full scan, 0 when absent.
 -- price/stock: relative change of the latest day vs the median of the window; history: ascending { day, price, stock }
 -- tiers: the item in the latest full scan, by price, lot size, time left; daily: { [day] = { price, stock, scans,
--- estimatedSales, seconds, estimatedSalesPerDay, reliable } }, the last two on compared days only. estimatedSalesPerDay
+-- estimatedSales, seconds, estimatedSalesPerDay, reliable, scarce } }, the last three on compared days only. estimatedSalesPerDay
 -- over the window, nil before two compared scans; confidence "high" from 2 days of comparisons in the window (so at
--- least 3 scans), "low" below; a day is reliable when it is in the window of a "high" confidence.
+-- least 3 scans) and M.MIN_SALES_SECONDS compared, "low" below; scarce (item, or day of the daily summary) when some
+-- time was compared but less than M.MIN_SALES_SECONDS; a day is reliable when it is in the window of a "high" confidence.
 function M.Report(itemID)
     local hist = T.History(itemID) or {}
     local today = T.Today()
@@ -472,10 +475,12 @@ function M.Report(itemID)
             days, units, seconds = days + 1, units + daily[d].estimatedSales, seconds + daily[d].seconds
         end
     end
-    local perDay, reliable = seconds > 0 and units * 86400 / seconds or nil, days >= 2
+    local scarce = seconds > 0 and seconds < M.MIN_SALES_SECONDS
+    local perDay, reliable = seconds > 0 and units * 86400 / seconds or nil, days >= 2 and not scarce
     for d, e in pairs(daily) do
         if e.seconds > 0 then
             e.estimatedSalesPerDay, e.reliable = e.estimatedSales * 86400 / e.seconds, reliable and inWindow(d)
+            e.scarce = e.seconds < M.MIN_SALES_SECONDS
         end
     end
     local tiers, verdict, source = encoded and decode(encoded) or {}, r.verdict, "trend"
@@ -491,6 +496,8 @@ function M.Report(itemID)
         trend = { price = r.price, stock = r.stock, days = r.days, age = r.age },
         estimatedSalesPerDay = perDay,
         estimatedSalesDays = days,
+        estimatedSalesSeconds = seconds,
+        scarce = scarce,
         confidence = perDay and (reliable and "high" or "low") or nil,
         history = hist,
         today = today,
