@@ -146,8 +146,7 @@ local c = VepIndustriesMarketDB.comparisons and VepIndustriesMarketDB.comparison
 local function has(entry) return ("," .. (c.items or "") .. ","):find("," .. entry .. ",", 1, true) end
 ok(#VepIndustriesMarketDB.comparisons == 1 and c.author == "Boris" and c.start == t0 and c.finish == t0 + 3600
   and c.realm == "PvE" and c.faction == "Horde" and has("910 2 1 100") and has("913 10 0 -") and has("915 - 9 10")
-  and has("911 0 0 -"), "Comparaison enregistree : auteur, hotel des ventes, debut, fin, vendues stock prix par objet")
-local function rate(id) return M.Report(id).estimatedSalesPerDay end
+  and has("911 0 0 -"), "Comparaison enregistree : auteur, hotel des ventes, debut, fin, vendues stock prix par objet")local function rate(id) return M.Report(id).estimatedSalesPerDay end
 ok(near(rate(910), 2 * 24), "palier partiellement vendu : 4 disparues dont 2 Short -> 2 vendues en 1 h")
 ok(rate(911) == 0, "encheres Short disparues : expirees, pas vendues")
 ok(rate(916) == 0, "encheres Medium disparues en plus de 30 min : expirees, pas vendues")
@@ -181,7 +180,9 @@ ok(rate(999999) == nil and M.Report(999999).confidence == nil, "objet sans scan 
 -- a Comparison over midnight: its sales split between both days, prorata of the time on each
 VepIndustriesMarketDB = {}
 M.Ingest({ [940] = { tier(100, 1, 5, 3) } }, t2 - 900, "PvE", "Horde", "Boris")
-M.Ingest({ [940] = { tier(100, 1, 3, 3) } }, t2 + 600, "PvE", "Horde", "Boris")
+M.Ingest({ [940] = { tier(100, 1, 3, 3) } }, t2 + 600, "PvE", "Horde", "Reroll")
+ok(VepIndustriesMarketDB.comparisons[1].author == "Boris",
+  "Comparaison finie sur un autre personnage du compte : auteur du compte")
 local eve, morn = M.Report(940).daily[TODAY - 1], M.Report(940).daily[TODAY]
 ok(near(eve.estimatedSales, 1.2) and eve.seconds == 900 and near(morn.estimatedSales, 0.8) and morn.seconds == 600
   and eve.scans == 1 and morn.scans == 1, "Comparaison a cheval sur minuit : ventes au prorata de chaque jour")

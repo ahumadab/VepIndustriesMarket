@@ -2,7 +2,8 @@
 -- Saved in VepIndustriesMarketDB: fullScan = { time, items = { [itemID] = tiers string } } (latest full scan only)
 -- daily = { [itemID] = { [Auctionator day] = "price stock scans[ estimatedSales seconds]" } } (daily summary, its estimated
 -- sales merged by Tranche from the Comparisons) and comparisons = { { author, realm, faction, start, finish, items =
--- "itemID sold stock price,..." }, ... } (the latest, see addComparison and tests/merge-cases.json).
+-- "itemID sold stock price,..." }, ... } (the latest, see addComparison and tests/merge-cases.json), author = their
+-- author for the whole account.
 local GM = VepIndustriesMarket
 local T = GM.Trend
 GM.Market = GM.Market or {}
@@ -202,7 +203,8 @@ local function byPrice(a, b)
 end
 
 -- Full scan: { [itemID] = { { price (unit, integer copper), size, count, timeLeft }, ... } } taken at time `now`
--- by `author` on the auction house of `realm` and `faction` (one per faction: scans to compare must share both).
+-- by character `author` on the auction house of `realm` and `faction` (one per faction: scans to compare must share
+-- both). The account's Comparisons all take the first author's name (db.author).
 -- Replaces the stored full scan and adds it to the daily summary (lowest price, highest stock of the day). Compared
 -- with the stored scan when it is from the same auction house, at most MAX_GAP older: a Comparison, kept and merged
 -- by Tranche into the estimated sales of the daily summary. A scan
@@ -226,6 +228,8 @@ function M.Ingest(scan, now, realm, faction, author)
         end
     end
     if next(items) == nil then return end
+    -- the account's author: its full scans form one chain whatever the character scanning
+    db.author = db.author or author
     db.daily = db.daily or {}
     local prev, daily = db.fullScan, db.daily
     local gap = prev and prev.realm == realm and prev.faction == faction and now - prev.time
@@ -251,7 +255,7 @@ function M.Ingest(scan, now, realm, faction, author)
         end
     end
     if gap then
-        addComparison(db, { author = author, realm = realm, faction = faction, start = prev.time, finish = now,
+        addComparison(db, { author = db.author, realm = realm, faction = faction, start = prev.time, finish = now,
             items = table.concat(entries, ",") }, day0)
     end
     local kept = {}

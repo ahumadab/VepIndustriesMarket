@@ -37,7 +37,7 @@ _Avoid_: Daily, agrégat
 _Code_: `daily`
 
 **Comparaison**:
-Résultat de la comparaison de deux scans complets consécutifs d'un même joueur : hôtel des ventes (royaume, faction), auteur, heure de début et de fin, et par objet les unités vendues (ventes estimées), le stock et le prix minimum du second scan. Identifiée par son auteur et son heure de début. C'est ce qui circule entre joueurs et vers le VPS.
+Résultat de la comparaison de deux scans complets consécutifs d'un même joueur : hôtel des ventes (royaume, faction), auteur (le compte du joueur, sous le nom de son premier personnage à avoir scanné), heure de début et de fin, et par objet les unités vendues (ventes estimées), le stock et le prix minimum du second scan. Identifiée par son auteur et son heure de début. C'est ce qui circule entre joueurs et vers le VPS.
 _Avoid_: Diff, delta, paire de scans
 _Code_: `comparison` (`start`, `finish`, `items`)
 
