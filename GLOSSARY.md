@@ -46,6 +46,11 @@ Demi-heure fixe du jour Auctionator (00:00-00:30, ...), unité de fusion des Com
 _Avoid_: Créneau, slot, bucket
 _Code_: `tranche` (`TRANCHE`, `Market.Merge`)
 
+**Script de synchro**:
+Script PowerShell livré avec l'addon qui fait le lien entre la sauvegarde du jeu et le VPS : installé une fois par `installer.cmd` avec le code d'invitation de l'ami, il tourne en tâche planifiée toutes les 15 minutes de la session Windows ; quand le jeu a écrit une nouvelle sauvegarde, il envoie les nouvelles Comparaisons au VPS et écrit le fichier de données de l'addon. Il se retire si l'addon disparaît ou après 30 jours sans nouvelle sauvegarde.
+_Avoid_: Client, companion, passerelle, synchro (seul, pour le script)
+_Code_: `Sync.ps1`; le code d'invitation est le `Sync-Code` de l'API
+
 ## Analyse
 
 **Tendance**:
