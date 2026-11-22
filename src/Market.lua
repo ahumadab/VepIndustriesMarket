@@ -143,6 +143,9 @@ local function pause()
     if co and not main then coroutine.yield() end
 end
 
+-- day of Tranche `k` (half hours from day0)
+local function trancheDay(k) return math.floor(k * TRANCHE / 86400) end
+
 -- first and last Tranche (half hours from day0) Comparison `c` covers
 local function tranches(c, day0)
     return math.floor((c.start - day0) / TRANCHE), math.floor((c.finish - 1 - day0) / TRANCHE)
@@ -201,7 +204,7 @@ local function addComparison(db, c, day0)
     for id, ks in pairs(M.Merge(near, day0, first, last)) do
         for k, v in pairs(ks) do
             local b = before[id] and before[id][k] or { 0, 0 }
-            addSales(db.daily, id, math.floor(k * TRANCHE / 86400), v[1] - b[1], v[2] - b[2])
+            addSales(db.daily, id, trancheDay(k), v[1] - b[1], v[2] - b[2])
         end
     end
     kept[#kept + 1] = c
@@ -325,22 +328,27 @@ local function itemEntry(items, id)
     return at and items:match("^[^,]+", at + 1)
 end
 
--- Daily summary of item `id`: ours alone without a data file. With one, the file's (every author's Comparisons it
--- counts), our Comparisons it doesn't count merged on top, and the prices and stocks of our own full scans.
--- ponytail: added, not averaged by Tranche with the counted ones (the file holds days only): those mostly come after
--- the file, so seldom share a Tranche with them
+-- Daily summary of item `id`: ours alone without a data file. With one, up to the day it was generated, its estimated
+-- sales (every author's Comparisons it counts) and our Comparisons it doesn't count merged on top; after that day, ours,
+-- which it counts none of. Prices and stocks: both the file's and those of our own full scans.
+-- ponytail: added, not averaged by Tranche with the counted ones (the file holds days only); ours start after the
+-- save the file answers, so share at most a Tranche or two with them. Tranches in the file if that double counts.
 local function dailyOf(db, id)
     local daily = {}
     for d, v in pairs(db.daily and db.daily[id] or {}) do daily[d] = readDay(v) end
     local file = VepIndustriesMarketData
     if not file then return daily end
-    for _, e in pairs(daily) do e.estimatedSales, e.seconds = 0, 0 end -- they count the file's Comparisons
+    local fileDay = T.Today(file.generated or 0)
+    local function fromFile(d) return not (fileDay and d > fileDay) end
+    for d, e in pairs(daily) do
+        if fromFile(d) then e.estimatedSales, e.seconds = 0, 0 end
+    end
     for d, v in pairs(file.daily and file.daily[id] or {}) do
         local f, e = readDay(v), daily[d]
         if e and f.stock then
             e.price = e.price and f.price and math.min(e.price, f.price) or e.price or f.price
             e.stock, e.scans = math.max(e.stock, f.stock), math.max(e.scans, f.scans)
-            e.estimatedSales, e.seconds = f.estimatedSales, f.seconds
+            if fromFile(d) then e.estimatedSales, e.seconds = f.estimatedSales, f.seconds end
         elseif f.stock then
             daily[d] = f
         end
@@ -352,9 +360,11 @@ local function dailyOf(db, id)
     end
     for _, ks in pairs(day0 and M.Merge(mine, day0) or {}) do
         for k, v in pairs(ks) do
-            local d = math.floor(k * TRANCHE / 86400)
-            local e = daily[d] or readDay("- 0 0")
-            daily[d], e.estimatedSales, e.seconds = e, e.estimatedSales + v[1], e.seconds + v[2]
+            local d = trancheDay(k)
+            if fromFile(d) then
+                local e = daily[d] or readDay("- 0 0") -- a day without a scan
+                daily[d], e.estimatedSales, e.seconds = e, e.estimatedSales + v[1], e.seconds + v[2]
+            end
         end
     end
     return daily

@@ -99,7 +99,7 @@ f:SetScript("OnEvent", function(_, event, arg)
     if event == "AUCTION_HOUSE_SHOW" then
         if dataTried then return end -- once a session: the game loads an addon once
         dataTried = true
-        if C_AddOns and C_AddOns.LoadAddOn then C_AddOns.LoadAddOn(DATA_ADDON) end -- missing: no file, nothing to do
+        C_AddOns.LoadAddOn(DATA_ADDON) -- false when missing (no Sync script): nothing to do
         local days = M.StaleDays()
         if days then
             GM.Say(string.format("les données partagées n'ont pas été renouvelées depuis %d jours : réinstalle le "

@@ -217,9 +217,15 @@ ok(near(shared[TODAY].estimatedSales, 7) and shared[TODAY].seconds == 5400 and s
   and shared[TODAY].stock == 12, "fichier de donnees : nos Comparaisons comptees une seule fois, les autres ajoutees")
 ok(shared[TODAY - 3].estimatedSales == 4 and shared[TODAY - 3].seconds == 1800 and shared[TODAY - 3].price == 80,
   "fichier de donnees : jour d'un ami seul")
-ok(M.StaleDays() == nil, "fichier de donnees recent : pas de synchro arretee")
+ok(M.StaleDays() == nil, "fichier de donnees recent : Script de synchro en marche")
 VepIndustriesMarketData.generated = t2 - 4 * 86400
-ok(M.StaleDays() == 4, "fichier de donnees vieux de 4 jours, scan plus recent : synchro arretee")
+ok(M.StaleDays() == 4, "fichier de donnees vieux de 4 jours, scan plus recent : Script de synchro arrete")
+-- days after the file's come from our daily summary, even once their Comparisons are dropped from the save
+local saved = VepIndustriesMarketDB.comparisons
+VepIndustriesMarketDB.comparisons = {}
+local late = M.Report(942).daily[TODAY]
+ok(late.estimatedSales == 3 and late.seconds == 3600, "fichier en retard : nos ventes des jours suivants gardees")
+VepIndustriesMarketDB.comparisons = saved
 -- past the cap, Comparisons the server counted go first
 VepIndustriesMarketData.counted = { Boris = { [t2 + 1800] = true } }
 local cap = M.MAX_COMPARISONS
@@ -229,7 +235,7 @@ kept = VepIndustriesMarketDB.comparisons
 ok(#kept == 2 and kept[1].start == t2 and kept[2].start == t2 + 3600, "Comparaisons comptees par le serveur retirees d'abord")
 M.MAX_COMPARISONS = cap
 VepIndustriesMarketData = nil
-ok(M.StaleDays() == nil, "sans fichier de donnees : pas de synchro arretee")
+ok(M.StaleDays() == nil, "sans fichier de donnees : rien a signaler")
 
 -- verdict from reliable estimated sales: days the current stock lasts at that pace (provisional thresholds, #7)
 VepIndustriesMarketDB = {}
@@ -594,7 +600,7 @@ C_AddOns = { LoadAddOn = function(name)
 end }
 fire("AUCTION_HOUSE_SHOW"); fire("AUCTION_HOUSE_SHOW")
 ok(#loads == 1 and loads[1] == "VepIndustriesMarket_Data" and lastSaid():find("5 jours")
-  and lastSaid():find("installer.cmd"), "synchro arretee signalee a l'ouverture de l'hotel des ventes " .. lastSaid())
+  and lastSaid():find("installer.cmd"), "Script de synchro arrete signale a l'ouverture de l'hotel des ventes " .. lastSaid())
 ok(M.Report(5500).daily[TODAY].scans == 2, "fichier de donnees vide : notre resume journalier garde")
 VepIndustriesMarketData = nil
 
