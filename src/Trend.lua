@@ -7,10 +7,16 @@ local T = GM.Trend
 
 T.WINDOW = 7 -- days compared against the latest scan day
 
+-- start of Auctionator's day 0 (2020-01-01, local time), nil without Auctionator
+function T.Day0()
+    local c = Auctionator and Auctionator.Constants
+    return c and c.SCAN_DAY_0
+end
+
 -- Auctionator scan day (days since 2020-01-01) of `now` (default: now)
 function T.Today(now)
-    local c = Auctionator and Auctionator.Constants
-    if c and c.SCAN_DAY_0 then return math.floor(((now or time()) - c.SCAN_DAY_0) / 86400) end
+    local day0 = T.Day0()
+    if day0 then return math.floor(((now or time()) - day0) / 86400) end
 end
 
 -- Ascending list { day, price, stock } for an item, from Auctionator's database.

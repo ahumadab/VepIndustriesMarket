@@ -29,6 +29,11 @@ if (literals.length) {
 
 const L = lauxlib.luaL_newstate();
 lualib.luaL_openlibs(L);
+// merge-cases.json, shared with the server, handed to test.lua as the global MERGE_CASES (numeric keys as numbers)
+const toLua = (v) => (Array.isArray(v) ? `{${v.map(toLua).join(',')}}`
+  : v && typeof v === 'object' ? `{${Object.entries(v).map(([k, x]) => `[${/^\d+$/.test(k) ? k : JSON.stringify(k)}]=${toLua(x)}`).join(',')}}`
+    : JSON.stringify(v));
+lauxlib.luaL_dostring(L, to_luastring(`MERGE_CASES = ${toLua(JSON.parse(readFileSync('merge-cases.json', 'utf8')))}`));
 if (lauxlib.luaL_dofile(L, to_luastring('test.lua')) !== 0) {
   console.error('✗ ' + lua.lua_tojsstring(L, -1));
   process.exit(1);

@@ -32,9 +32,19 @@ _Avoid_: Enchère, ligne, tier
 _Code_: `tier`
 
 **Résumé journalier**:
-Pour un objet, par jour Auctionator : le prix minimum et le stock maximum vus dans les scans complets du jour, le nombre de ces scans et les ventes estimées depuis le scan précédent, avec la durée sur laquelle elles portent. Conservé 21 jours.
+Pour un objet, par jour Auctionator : le prix minimum et le stock maximum vus dans les scans complets du jour, le nombre de ces scans et les ventes estimées des Comparaisons fusionnées par Tranche, avec la durée sur laquelle elles portent. Conservé 21 jours.
 _Avoid_: Daily, agrégat
 _Code_: `daily`
+
+**Comparaison**:
+Résultat de la comparaison de deux scans complets consécutifs d'un même joueur : hôtel des ventes (royaume, faction), auteur (le compte du joueur, sous le nom de son premier personnage à avoir scanné), heure de début et de fin, et par objet les unités vendues (ventes estimées), le stock et le prix minimum du second scan. Identifiée par son auteur et son heure de début. C'est ce qui circule entre joueurs et vers le VPS.
+_Avoid_: Diff, delta, paire de scans
+_Code_: `comparison` (`start`, `finish`, `items`)
+
+**Tranche**:
+Demi-heure fixe du jour Auctionator (00:00-00:30, ...), unité de fusion des Comparaisons : chaque Comparaison répartit ses ventes au prorata du temps passé dans chaque Tranche ; sur une même Tranche, les Comparaisons d'un même auteur s'additionnent et celles de plusieurs auteurs donnent leur moyenne, pour ne pas compter deux fois les mêmes achats. Règle et cas communs à l'addon et au serveur : `tests/merge-cases.json`.
+_Avoid_: Créneau, slot, bucket
+_Code_: `tranche` (`TRANCHE`, `Market.Merge`)
 
 ## Analyse
 

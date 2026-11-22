@@ -51,7 +51,7 @@ local function ingest(n, get)
     if running then return GM.Say("un Scan complet est déjà en cours d'enregistrement.") end
     GM.Say(string.format("enregistrement du Scan complet en cours (%d enchères)…", n))
     running = coroutine.create(function()
-        M.Ingest(toFullScan(n, get), time(), GetRealmName(), UnitFactionGroup("player"))
+        M.Ingest(toFullScan(n, get), time(), GetRealmName(), UnitFactionGroup("player"), UnitName("player"))
         GM.Say(string.format("Scan complet enregistré : %d objets (/reload pour sauvegarder).", M.Status().items))
     end)
     local function step()
