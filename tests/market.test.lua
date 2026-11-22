@@ -173,6 +173,19 @@ ok(near(shared[TODAY].estimatedSales, 7) and shared[TODAY].seconds == 5400 and s
   and shared[TODAY].stock == 12, "fichier de donnees : nos Comparaisons comptees une seule fois, les autres ajoutees")
 ok(shared[TODAY - 3].estimatedSales == 4 and shared[TODAY - 3].seconds == 1800 and shared[TODAY - 3].price == 80,
   "fichier de donnees : jour d'un ami seul")
+-- a day the file holds no sales for (scans before the Sync script, their Comparisons dropped since) keeps ours:
+-- the real case of Runecloth on 2026-11-22, 1 037 units over 7 970 s the day before the file's only day
+VepIndustriesMarketDB.daily[942][TODAY - 1] = "500 22006 10 1037 7970"
+VepIndustriesMarketDB.daily[942][TODAY - 2] = "500 20000 2 5 1200"
+VepIndustriesMarketData.daily[942][TODAY - 2] = "450 21000 1" -- price and stock only, no compared time
+local before = M.Report(942).daily
+ok(before[TODAY - 1].estimatedSales == 1037 and before[TODAY - 1].seconds == 7970,
+  "fichier de donnees sans ce jour : nos ventes gardees")
+ok(before[TODAY - 2].estimatedSales == 5 and before[TODAY - 2].seconds == 1200 and before[TODAY - 2].price == 450,
+  "fichier de donnees sans ventes ce jour : nos ventes gardees, son prix pris")
+ok(near(before[TODAY].estimatedSales, 7) and before[TODAY].seconds == 5400, "jour du fichier : inchange")
+VepIndustriesMarketDB.daily[942][TODAY - 1], VepIndustriesMarketDB.daily[942][TODAY - 2] = nil, nil
+VepIndustriesMarketData.daily[942][TODAY - 2] = nil
 ok(M.StaleDays() == nil, "fichier de donnees recent : Script de synchro en marche")
 VepIndustriesMarketData.generated = t2 - 4 * 86400
 ok(M.StaleDays() == 4, "fichier de donnees vieux de 4 jours, scan plus recent : Script de synchro arrete")

@@ -389,7 +389,8 @@ end
 
 -- Daily summary of item `id`: ours alone without a data file. With one, up to the day it was generated, its estimated
 -- sales (every author's Comparisons it counts) and our Comparisons it doesn't count merged on top; after that day, ours,
--- which it counts none of. Prices and stocks: both the file's and those of our own full scans.
+-- which it counts none of. A day the file holds no sales for the item (absent, or no compared time: scans before the
+-- Sync script ran) keeps ours too. Prices and stocks: both the file's and those of our own full scans.
 -- ponytail: added, not averaged by Tranche with the counted ones (the file holds days only); ours start after the
 -- save the file answers, so share at most a Tranche or two with them. Tranches in the file if that double counts.
 local function dailyOf(db, id)
@@ -397,12 +398,14 @@ local function dailyOf(db, id)
     for d, v in pairs(db.daily and db.daily[id] or {}) do daily[d] = readDay(v) end
     local file = VepIndustriesMarketData
     if not file then return daily end
-    local fileDay = T.Today(file.generated or 0)
-    local function fromFile(d) return not (fileDay and d > fileDay) end
+    local fileDay, fileDaily = T.Today(file.generated or 0), file.daily and file.daily[id] or {}
+    local function fromFile(d)
+        return not (fileDay and d > fileDay) and fileDaily[d] ~= nil and readDay(fileDaily[d]).seconds > 0
+    end
     for d, e in pairs(daily) do
         if fromFile(d) then e.estimatedSales, e.seconds = 0, 0 end
     end
-    for d, v in pairs(file.daily and file.daily[id] or {}) do
+    for d, v in pairs(fileDaily) do
         local f, e = readDay(v), daily[d]
         if e and f.stock then
             e.price = e.price and f.price and math.min(e.price, f.price) or e.price or f.price
