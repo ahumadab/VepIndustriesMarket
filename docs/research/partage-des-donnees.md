@@ -118,13 +118,25 @@ L'addon de Boris diffuse ensuite en jeu ce que les autres n'ont pas. Le VPS n'a 
 
 ## 5. Incertitudes propres à Forever
 
-D'après le wiki, Forever est une version officielle de Blizzard qui « shares Mainline WoW's UI architecture, including the vast majority of APIs available in 12.1.5 ». Les restrictions de Midnight s'y appliquent aussi ([notes 1.60.1](https://warcraft.wiki.gg/wiki/Patch_1.60.1/API_changes)). Les limites de débit côté serveur, elles, ne sont documentées nulle part pour Forever. À vérifier en jeu, une seule fois, sans nouveau Scan complet :
+D'après le wiki, Forever est une version officielle de Blizzard qui « shares Mainline WoW's UI architecture, including the vast majority of APIs available in 12.1.5 ». Les restrictions de Midnight s'y appliquent aussi ([notes 1.60.1](https://warcraft.wiki.gg/wiki/Patch_1.60.1/API_changes)). Les limites de débit côté serveur, elles, ne sont documentées nulle part pour Forever. À vérifier en jeu, une seule fois, sans nouveau Scan complet. La sonde `tools/probe` (`npm run probe`, ticket #19) fait ces mesures et les enregistre :
 
 - **Débit par préfixe** : `/run local r={} for i=1,20 do r[i]=C_ChatInfo.SendAddonMessage("VIMTEST",("x"):rep(250),"GUILD") end print(table.concat(r," "))`. On attend dix `0` puis des `3`. Recommencer avec `"WHISPER", UnitName("player")` pour vérifier l'exemption des chuchotements.
 - **APIs présentes** : `/dump C_EncodingUtil ~= nil, C_BattleNet.SendGameData ~= nil, C_ChatInfo.InChatMessagingLockdown()`.
 - **Taille admise par SendGameData** : envoyer à un ami Battle.net connecté des messages de 1 000, 2 000 puis 4 000 octets, et regarder ce qui arrive (`BN_CHAT_MSG_ADDON`).
 - **LoadOnDemand relu en cours de session** : modifier le fichier d'un addon `LoadOnDemand` jeu ouvert, puis `/run C_AddOns.LoadAddOn("...")`. Si le client lit le fichier à ce moment-là, H2 peut livrer des données une fois par session, sans `/reload`.
 - **Comptes d'essai** : demander à chaque ami s'il a un compte payant (voir la restriction citée au § 3.1).
+
+### Résultats en jeu (22/11/2026, ticket #19)
+
+Mesuré par Boris avec la sonde, hors instance, en messages de 250 octets :
+
+- **`GUILD`** : 10 messages acceptés d'un coup, puis 1 par seconde (20 et 21 en 20 s), et chaque message accepté est reçu. Au-delà, l'envoi est refusé avec le code `3` (`AddonMessageThrottle`). C'est la limite du wiki.
+- **`WHISPER`** : aucun refus à 12 messages d'un coup puis 5 par seconde (1 250 o/s pendant 20 s), et 112 messages reçus sur 112. La limite réelle, si elle existe, est au-dessus.
+- **Noms** : un royaume de Forever n'a pas de nom (`GetNormalizedRealmName()` renvoie `""`). Un personnage a un prénom et un nom de famille, que `UnitName` donne en deuxième résultat. Un chuchotement n'atteint le joueur que sous la forme `Prénom-NomDeFamille`. `CHAT_MSG_ADDON` donne l'expéditeur sous la forme `Prénom NomDeFamille`, avec une espace : pour lui répondre, il faut remplacer l'espace par un tiret.
+- **Destinataire déconnecté ou introuvable** : l'envoi est accepté (code `0`, jamais `12`). Puis le serveur affiche dans la discussion, pour chaque message, « No player named 'Prénom NomDeFamille' is currently playing. » (client en anglais). Un transfert vers un joueur parti remplit donc la discussion tant que ce message n'est pas filtré.
+- **Addon `LoadOnDemand`** : le fichier modifié jeu ouvert est relu par `C_AddOns.LoadAddOn`. Le fichier du VPS peut donc arriver en cours de partie, une fois par session.
+- **APIs** : `C_EncodingUtil` (`CompressString`, `SerializeCBOR`, `EncodeBase64`) et `C_BattleNet.SendGameData` sont présents. `AreOutgoingAddonChatMessagesRestricted()` répond `true`, alors que les envois passent : il ne faut pas s'y fier.
+- **Non mesuré** : le débit en `WHISPER` dans un donjon et le blocage pendant un combat de boss. Le test demandait d'autres joueurs, et Boris y a renoncé. On suit le wiki (limite de débit sur les chuchotements en instance) et DungeonForever, qui traite le code `11` (`AddOnMessageLockdown`) et `InChatMessagingLockdown()` en réessayant 2 s plus tard. L'échange doit donc supporter un refus pour débit comme un blocage.
 
 ## 6. Recommandation
 
