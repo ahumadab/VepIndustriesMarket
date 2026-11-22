@@ -8,4 +8,4 @@ Tout calcul sur les données (moyennes, ramenés à un jour, fiabilité, seuils,
 
 ## Constantes de l'interface
 
-Chaque couleur et chaque dimension de l'interface a une seule définition (`COLOR`, `PRICE`, `STOCK`, `SALES`, `W`, `H`, `SPAN`...), réutilisée par les textures, les textes et les codes `|cff` (via `hex`). Les tests qui reconnaissent un élément à sa couleur le disent dans un commentaire qui nomme la constante.
+Chaque couleur et chaque dimension de l'interface a une seule définition (`COLOR`, `PRICE`, `STOCK`, `SALES`, `W`, `H`, `SPAN`...), réutilisée par les textures, les textes et les codes `|cff` (via `hex` ; `tests/run.cjs` refuse ceux écrits en dur dans `src/UI.lua`). Les tests qui reconnaissent un élément à sa couleur le disent dans un commentaire qui nomme la constante.
