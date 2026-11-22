@@ -138,11 +138,9 @@ end
 
 -- a file of src/ run as the game runs it: `...` is the addon's name
 function loadAddonFile(file) return assert(loadfile("../src/" .. file))("VepIndustriesMarket") end
--- the files of src/VepIndustriesMarket.toc, in its order
+-- the files of src/VepIndustriesMarket.toc, in its order (ADDON_FILES, read by tests/run.cjs)
 function loadAddon()
-  for _, file in ipairs({ "Libs/ChatThrottleLib.lua", "Trend.lua", "Market.lua", "Capture.lua", "Exchange.lua", "UI.lua" }) do
-    loadAddonFile(file)
-  end
+  for _, file in ipairs(ADDON_FILES) do loadAddonFile(file) end
 end
 
 -- a tier of a full scan, and fixture rows { itemID, size, buyout, timeLeft, count } as a full scan

@@ -52,7 +52,10 @@ if (layout.length) {
 const toLua = (v) => (Array.isArray(v) ? `{${v.map(toLua).join(',')}}`
   : v && typeof v === 'object' ? `{${Object.entries(v).map(([k, x]) => `[${/^\d+$/.test(k) ? k : JSON.stringify(k)}]=${toLua(x)}`).join(',')}}`
     : JSON.stringify(v));
-const MERGE_CASES = `MERGE_CASES = ${toLua(JSON.parse(readFileSync('merge-cases.json', 'utf8')))}`;
+const GLOBALS = `MERGE_CASES = ${toLua(JSON.parse(readFileSync('merge-cases.json', 'utf8')))}`
+  // and the addon's files, in the order of its .toc (loadAddon() in doubles.lua)
+  + `\nADDON_FILES = ${toLua(readFileSync('../src/VepIndustriesMarket.toc', 'utf8').split(/\r?\n/)
+    .filter((l) => /^[^#].*\.lua$/.test(l.trim())).map((l) => l.trim().replace(/\\/g, '/')))}`;
 // each test file in a fresh Lua state, after doubles.lua, then its done(); `node tests/run.cjs <file>` runs one
 const only = process.argv[2] && process.argv[2] !== 'merge-case' && basename(process.argv[2]);
 const failures = [];
@@ -61,8 +64,11 @@ for (const file of only ? [only] : readdirSync('.').filter((f) => f.endsWith('.t
   console.log(`- ${file}`);
   const L = lauxlib.luaL_newstate();
   lualib.luaL_openlibs(L);
-  const step = (status) => status === 0 || failures.push(`${file} : ${lua.lua_tojsstring(L, -1)}`) && false;
-  if (step(lauxlib.luaL_dostring(L, to_luastring(MERGE_CASES))) && step(lauxlib.luaL_dofile(L, to_luastring('doubles.lua')))
+  const step = (status) => {
+    if (status !== 0) failures.push(`${file} : ${lua.lua_tojsstring(L, -1)}`);
+    return status === 0;
+  };
+  if (step(lauxlib.luaL_dostring(L, to_luastring(GLOBALS))) && step(lauxlib.luaL_dofile(L, to_luastring('doubles.lua')))
     && step(lauxlib.luaL_dofile(L, to_luastring(file)))) step(lauxlib.luaL_dostring(L, to_luastring('done()')));
   lua.lua_getglobal(L, 'REAL_MERGE_CASE');
   if (lua.lua_isstring(L, -1)) realMergeCase = lua.lua_tojsstring(L, -1);

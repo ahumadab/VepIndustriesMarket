@@ -11,7 +11,6 @@ loadAddonFile("Market.lua")
 local M = VepIndustriesMarket.Market
 
 -- fabricated histories: { {day, price, stock}, ... } in Auctionator's shape, under a fake itemID
-FAKE = {}
 local nextID = 900000
 local function report(days)
   nextID = nextID + 1
