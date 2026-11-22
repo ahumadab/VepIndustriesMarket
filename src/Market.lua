@@ -4,6 +4,7 @@
 -- sales merged by Tranche from the Comparisons) and comparisons = { { author, realm, faction, start, finish, items =
 -- "itemID sold stock price,..." }, ... } (the latest, see addComparison and tests/merge-cases.json), author = their
 -- author for the whole account.
+-- scripts/saved.mjs (npm run report, npm run fixture) parses these formats from the save: change it with them.
 local GM = VepIndustriesMarket
 local T = GM.Trend
 GM.Market = GM.Market or {}
@@ -140,7 +141,7 @@ end
 -- { [itemID] = { [tranche] = { units, seconds } } }. Each Comparison spreads an item's units over the Tranches it
 -- covers, prorata of its time in each; an author's Comparisons in a Tranche add up (they never overlap), and authors
 -- average out, units and seconds alike: players scanning at once see the same purchases. Items not compared ignored.
--- Same rule on the server: tests/merge-cases.json.
+-- Same rule on the server: tests/merge-cases.json; after changing it, npm run merge-case rewrites its real case.
 function M.Merge(comparisons, day0, first, last)
     local byAuthor, done = {}, 0 -- [itemID][tranche][author] = { units, seconds }
     for _, c in ipairs(comparisons) do

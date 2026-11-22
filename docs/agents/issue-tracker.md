@@ -6,6 +6,7 @@ Issues and specs for this repo live as GitHub issues on `ahumadab/VepIndustriesM
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc or `--body-file` for multi-line bodies.
 - **Read an issue**: `gh issue view <number> --json title,body,labels,comments`. Outside a terminal, `--comments` prints the comments only, without the body.
+- **Refer to a sibling ticket** (in code, a comment, a PR): list the tickets of the spec first, `gh api repos/ahumadab/VepIndustriesMarket/issues/<spec>/sub_issues --jq '.[] | "\(.number) \(.title)"'`, and cite the one whose title matches.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`

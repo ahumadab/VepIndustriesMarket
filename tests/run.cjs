@@ -1,5 +1,7 @@
 // Runs tests/test.lua with Fengari (Lua 5.3 in JS) and WoW API doubles. Exit code 1 on any failure.
-const { readdirSync, readFileSync } = require('node:fs');
+// With "merge-case" (npm run merge-case), also rewrites the real case of merge-cases.json from Market.Merge, after a
+// change of the merge rule: the server replays the new expectations.
+const { readdirSync, readFileSync, writeFileSync } = require('node:fs');
 const { lua, lauxlib, lualib, to_luastring } = require('fengari');
 process.chdir(__dirname);
 
@@ -34,7 +36,36 @@ const toLua = (v) => (Array.isArray(v) ? `{${v.map(toLua).join(',')}}`
   : v && typeof v === 'object' ? `{${Object.entries(v).map(([k, x]) => `[${/^\d+$/.test(k) ? k : JSON.stringify(k)}]=${toLua(x)}`).join(',')}}`
     : JSON.stringify(v));
 lauxlib.luaL_dostring(L, to_luastring(`MERGE_CASES = ${toLua(JSON.parse(readFileSync('merge-cases.json', 'utf8')))}`));
-if (lauxlib.luaL_dofile(L, to_luastring('test.lua')) !== 0) {
-  console.error('✗ ' + lua.lua_tojsstring(L, -1));
+const failure = lauxlib.luaL_dofile(L, to_luastring('test.lua')) !== 0 && lua.lua_tojsstring(L, -1);
+if (process.argv[2] === 'merge-case') {
+  // the real case, last of the file, rewritten in its layout: one comparison per line, one item per line
+  const REAL = '    {\n      "name": "Comparaison réelle';
+  const text = readFileSync('merge-cases.json', 'utf8');
+  const at = text.indexOf(REAL);
+  lua.lua_getglobal(L, 'REAL_MERGE_CASE');
+  if (at < 0 || !lua.lua_isstring(L, -1)) {
+    console.error('✗ cas réel introuvable dans merge-cases.json ou non construit par test.lua');
+    process.exit(1);
+  }
+  const real = JSON.parse(lua.lua_tojsstring(L, -1));
+  const name = text.slice(at).match(/"name": "([^"]*)"/)[1];
+  const tranches = Object.entries(real.tranches)
+    .map(([id, ks]) => `"${id}": { ${Object.entries(ks).map(([k, v]) => `"${k}": [${v.join(', ')}]`).join(', ')} }`);
+  writeFileSync('merge-cases.json', `${text.slice(0, at)}    {
+      "name": ${JSON.stringify(name)},
+      "comparisons": [
+        ${real.comparisons.map((c) => `{ "author": "${c.author}", "start": ${c.start}, "finish": ${c.finish}, "items": ${JSON.stringify(c.items)} }`).join(',\n        ')}
+      ],
+      "tranches": {
+        ${tranches.join(',\n        ')}
+      }
+    }
+  ]
+}
+`);
+  console.log('✓ cas réel de merge-cases.json réécrit');
+}
+if (failure) {
+  console.error('✗ ' + failure);
   process.exit(1);
 }
