@@ -1,9 +1,114 @@
-// Runs tests/test.lua with Fengari (Lua 5.3 in JS) and WoW API doubles. Exit code 1 on any failure.
+// Runs each tests/*.test.lua with Fengari (Lua 5.3 in JS) and the WoW API doubles of tests/doubles.lua, or only the
+// file given (node tests/run.cjs market.test.lua). Exit code 1 on any failure.
+// With "merge-case" (npm run merge-case), also rewrites the real case of merge-cases.json from Market.Merge, after a
+// change of the merge rule: the server replays the new expectations, from its copy in vepindustries-api, which
+// merge-case refreshes when that repo is cloned next to this one (AGENTS.md) and every run compares.
+const { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } = require('node:fs');
+const { basename } = require('node:path');
 const { lua, lauxlib, lualib, to_luastring } = require('fengari');
 process.chdir(__dirname);
-const L = lauxlib.luaL_newstate();
-lualib.luaL_openlibs(L);
-if (lauxlib.luaL_dofile(L, to_luastring('test.lua')) !== 0) {
-  console.error('✗ ' + lua.lua_tojsstring(L, -1));
+
+// The game runs Lua 5.1: reject 5.3-only syntax and libraries that Fengari would accept.
+// Comments and strings are blanked first (keeping newlines), so "|cff" color codes and "--" in text don't match.
+const LUA53 = /\/\/|[&|]|~(?!=)|<<|>>|\bgoto\b|::\w+::|\butf8\.|\btable\.move\b|\bmath\.(type|tointeger)\b|\bstring\.(pack|unpack|packsize)\b/;
+const NOISE = /--\[(=*)\[[\s\S]*?\]\1\]|--[^\n]*|\[(=*)\[[\s\S]*?\]\2\]|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g;
+const lua53 = [];
+for (const f of readdirSync('../src').filter((f) => f.endsWith('.lua'))) {
+  const code = readFileSync(`../src/${f}`, 'utf8').replace(NOISE, (m) => m.replace(/[^\n]/g, ' '));
+  code.split('\n').forEach((line, i) => { if (LUA53.test(line)) lua53.push(`src/${f}:${i + 1}: ${line.trim()}`); });
+}
+if (lua53.length) {
+  console.error('✗ Lua 5.3 absent du jeu (5.1) :\n' + lua53.join('\n'));
   process.exit(1);
 }
+
+// CODING_STANDARDS.md, interface constants: every |cff colour code of src/UI.lua comes from hex() and a named colour.
+// Comments are blanked, strings kept; hex()'s own "|cff%02x..." template is the one allowed literal.
+const COMMENT = /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|--\[(=*)\[[\s\S]*?\]\2\]|--[^\n]*/g;
+const ui = readFileSync('../src/UI.lua', 'utf8').replace(COMMENT, (m, str) => str || m.replace(/[^\n]/g, ' '));
+const literals = ui.split('\n').flatMap((line, i) => (/\|cff(?!%02x)/.test(line) ? [`src/UI.lua:${i + 1}: ${line.trim()}`] : []));
+if (literals.length) {
+  console.error('✗ code couleur écrit en dur, à passer par hex() et une constante :\n' + literals.join('\n'));
+  process.exit(1);
+}
+
+// PowerShell and cmd files (the Sync script's, tools/staging.ps1): Windows PowerShell 5.1 reads a .ps1 without BOM in
+// the ANSI code page (accents broken), and cmd misreads a .cmd without CRLF. .editorconfig and .gitattributes set both;
+// this catches an editor that didn't.
+const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+const layout = ['src', 'tools'].flatMap((dir) => readdirSync(`../${dir}`).filter((f) => /\.(ps1|cmd)$/.test(f))
+  .flatMap((f) => {
+    const bytes = readFileSync(`../${dir}/${f}`);
+    if (f.endsWith('.ps1') && !bytes.subarray(0, 3).equals(BOM)) return [`${dir}/${f} : BOM UTF-8 manquant`];
+    if (f.endsWith('.cmd') && /(^|[^\r])\n/.test(bytes.toString('latin1'))) return [`${dir}/${f} : fin de ligne sans CR`];
+    return [];
+  }));
+if (layout.length) {
+  console.error('✗ fichiers PowerShell ou cmd mal enregistrés :\n' + layout.join('\n'));
+  process.exit(1);
+}
+
+// merge-cases.json, shared with the server, handed to each test file as the global MERGE_CASES (numeric keys as numbers)
+const toLua = (v) => (Array.isArray(v) ? `{${v.map(toLua).join(',')}}`
+  : v && typeof v === 'object' ? `{${Object.entries(v).map(([k, x]) => `[${/^\d+$/.test(k) ? k : JSON.stringify(k)}]=${toLua(x)}`).join(',')}}`
+    : JSON.stringify(v));
+const GLOBALS = `MERGE_CASES = ${toLua(JSON.parse(readFileSync('merge-cases.json', 'utf8')))}`
+  // and the addon's files, in the order of its .toc (loadAddon() in doubles.lua)
+  + `\nADDON_FILES = ${toLua(readFileSync('../src/VepIndustriesMarket.toc', 'utf8').split(/\r?\n/)
+    .filter((l) => /^[^#].*\.lua$/.test(l.trim())).map((l) => l.trim().replace(/\\/g, '/')))}`;
+// each test file in a fresh Lua state, after doubles.lua, then its done(); `node tests/run.cjs <file>` runs one
+const only = process.argv[2] && process.argv[2] !== 'merge-case' && basename(process.argv[2]);
+const failures = [];
+let realMergeCase;
+for (const file of only ? [only] : readdirSync('.').filter((f) => f.endsWith('.test.lua'))) {
+  console.log(`- ${file}`);
+  const L = lauxlib.luaL_newstate();
+  lualib.luaL_openlibs(L);
+  const step = (status) => {
+    if (status !== 0) failures.push(`${file} : ${lua.lua_tojsstring(L, -1)}`);
+    return status === 0;
+  };
+  if (step(lauxlib.luaL_dostring(L, to_luastring(GLOBALS))) && step(lauxlib.luaL_dofile(L, to_luastring('doubles.lua')))
+    && step(lauxlib.luaL_dofile(L, to_luastring(file)))) step(lauxlib.luaL_dostring(L, to_luastring('done()')));
+  lua.lua_getglobal(L, 'REAL_MERGE_CASE');
+  if (lua.lua_isstring(L, -1)) realMergeCase = lua.lua_tojsstring(L, -1);
+}
+if (process.argv[2] === 'merge-case') {
+  // the real case, last of the file, rewritten in its layout: one comparison per line, one item per line
+  const REAL = '    {\n      "name": "Comparaison réelle';
+  const text = readFileSync('merge-cases.json', 'utf8');
+  const at = text.indexOf(REAL);
+  if (at < 0 || !realMergeCase) {
+    console.error('✗ cas réel introuvable dans merge-cases.json ou non construit par market.test.lua');
+    process.exit(1);
+  }
+  const real = JSON.parse(realMergeCase);
+  const name = text.slice(at).match(/"name": "([^"]*)"/)[1];
+  const tranches = Object.entries(real.tranches)
+    .map(([id, ks]) => `"${id}": { ${Object.entries(ks).map(([k, v]) => `"${k}": [${v.join(', ')}]`).join(', ')} }`);
+  writeFileSync('merge-cases.json', `${text.slice(0, at)}    {
+      "name": ${JSON.stringify(name)},
+      "comparisons": [
+        ${real.comparisons.map((c) => `{ "author": "${c.author}", "start": ${c.start}, "finish": ${c.finish}, "items": ${JSON.stringify(c.items)} }`).join(',\n        ')}
+      ],
+      "tranches": {
+        ${tranches.join(',\n        ')}
+      }
+    }
+  ]
+}
+`);
+  console.log('✓ cas réel de merge-cases.json réécrit');
+}
+const SERVER_CASES = '../../vepindustries/api/apps/api/tests/modules/market/application/merge-cases.json';
+if (process.argv[2] === 'merge-case' && existsSync(SERVER_CASES)) {
+  copyFileSync('merge-cases.json', SERVER_CASES);
+  console.log('✓ copié dans vepindustries-api, à y committer');
+} else if (!existsSync(SERVER_CASES) || readFileSync(SERVER_CASES, 'utf8') !== readFileSync('merge-cases.json', 'utf8')) {
+  console.warn(`! merge-cases.json diffère de la copie du serveur ou elle est introuvable : ${SERVER_CASES}`);
+}
+if (failures.length) {
+  console.error('✗ ' + failures.join('\n✗ '));
+  process.exit(1);
+}
+console.log('TOUT OK');

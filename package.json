@@ -1,13 +1,19 @@
 {
   "name": "vepindustries-market",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "VepIndustries Market - WoW Forever addon: auction house price/stock trends",
   "type": "module",
   "scripts": {
-    "test": "node tests/run.cjs",
+    "prepare": "git config core.hooksPath .githooks",
+    "test": "node tests/run.cjs && node tests/sync.cjs",
+    "merge-case": "node tests/run.cjs merge-case",
     "deploy": "node scripts/build.mjs deploy",
-    "release": "node scripts/build.mjs release"
+    "release": "node scripts/build.mjs release",
+    "fixture": "node scripts/saved.mjs fixture",
+    "report": "node scripts/saved.mjs report",
+    "probe": "node scripts/probe.mjs",
+    "staging": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/staging.ps1"
   },
   "devDependencies": {
     "fengari": "^0.1.4"

@@ -1,0 +1,6 @@
+## Interface: 16001
+## Title: VIM Probe
+## Notes: Mesures ponctuelles du ticket #19 (messages d'addon, addon chargé à la demande). À retirer ensuite.
+## SavedVariables: VimProbeDB
+
+VimProbe.lua

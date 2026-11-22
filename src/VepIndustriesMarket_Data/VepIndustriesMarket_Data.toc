@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: VepIndustries Market (données)
+## Notes: Données partagées écrites par le Script de synchro, chargées à l'ouverture de l'hôtel des ventes.
+## Author: VepIndustries (Boris AHUMADA)
+## Version: @version@
+## Dependencies: VepIndustriesMarket
+## LoadOnDemand: 1
+
+Data.lua
