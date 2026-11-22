@@ -403,16 +403,21 @@ CreateFrame = function(kind, name)
   f.Show = function() shown = true end
   f.Hide = function() shown = false end
   f.SetScript = function(self, script, fn) rawset(self, script, fn) end
+  local events = {}
+  f.RegisterEvent = function(_, e) events[e] = true end
+  f.UnregisterEvent = function(_, e) events[e] = nil end
+  f.IsEventRegistered = function(_, e) return events[e] == true end
   frames[#frames + 1] = f
   return f
 end
 local said = {}
 print = function(s) said[#said + 1] = s end
 local function lastSaid() return said[#said] or "" end
+-- as the game: only to the frames registered for the event
 local function fire(event, arg)
   for _, f in ipairs(frames) do
     local onEvent = rawget(f, "OnEvent")
-    if onEvent then onEvent(f, event, arg) end
+    if onEvent and f:IsEventRegistered(event) then onEvent(f, event, arg) end
   end
 end
 local okLoad, err = pcall(function()
@@ -601,6 +606,8 @@ end }
 fire("AUCTION_HOUSE_SHOW"); fire("AUCTION_HOUSE_SHOW")
 ok(#loads == 1 and loads[1] == "VepIndustriesMarket_Data" and lastSaid():find("5 jours")
   and lastSaid():find("installer.cmd"), "Script de synchro arrete signale a l'ouverture de l'hotel des ventes " .. lastSaid())
+local seen = VepIndustriesMarketDB.dataFile
+ok(seen and seen.generated == time() - 5 * 86400 and seen.items == 0, "fichier charge note dans la sauvegarde (npm run report)")
 ok(M.Report(5500).daily[TODAY].scans == 2, "fichier de donnees vide : notre resume journalier garde")
 VepIndustriesMarketData = nil
 

@@ -52,9 +52,11 @@ build(join(root, 'src', DATA), DATA);
 // 4. copy into the game, keeping the data file the Sync script wrote; a new addon folder shows in the game only after
 // a restart, not on /reload
 if (!existsSync(addons)) fail(`dossier AddOns introuvable : ${addons} (variable WOW_ADDONS)`);
+const added = [ADDON, DATA].filter((name) => !existsSync(join(addons, name)));
 rmSync(join(addons, ADDON), { recursive: true, force: true });
 for (const name of [ADDON, DATA]) cpSync(join(root, 'dist', name), join(addons, name), { recursive: true });
-console.log(`✓ ${ADDON} ${version} -> ${addons}  (/reload en jeu)`);
+console.log(`✓ ${ADDON} ${version} -> ${addons}  `
+  + (added.length ? `(nouveau dossier ${added.join(', ')} : relance le jeu, /reload ne suffit pas)` : '(/reload en jeu)'));
 
 // 5. release artefacts
 if (mode === 'release') {

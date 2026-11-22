@@ -30,17 +30,19 @@ if (literals.length) {
   process.exit(1);
 }
 
-// The Sync script's files: Windows PowerShell 5.1 reads a .ps1 without BOM in the ANSI code page (accents broken),
-// and cmd misreads a .cmd without CRLF. .editorconfig and .gitattributes set both; this catches an editor that didn't.
+// PowerShell and cmd files (the Sync script's, tools/staging.ps1): Windows PowerShell 5.1 reads a .ps1 without BOM in
+// the ANSI code page (accents broken), and cmd misreads a .cmd without CRLF. .editorconfig and .gitattributes set both;
+// this catches an editor that didn't.
 const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
-const layout = readdirSync('../src').filter((f) => /\.(ps1|cmd)$/.test(f)).flatMap((f) => {
-  const bytes = readFileSync(`../src/${f}`);
-  if (f.endsWith('.ps1') && !bytes.subarray(0, 3).equals(BOM)) return [`src/${f} : BOM UTF-8 manquant`];
-  if (f.endsWith('.cmd') && /(^|[^\r])\n/.test(bytes.toString('latin1'))) return [`src/${f} : fin de ligne sans CR`];
-  return [];
-});
+const layout = ['src', 'tools'].flatMap((dir) => readdirSync(`../${dir}`).filter((f) => /\.(ps1|cmd)$/.test(f))
+  .flatMap((f) => {
+    const bytes = readFileSync(`../${dir}/${f}`);
+    if (f.endsWith('.ps1') && !bytes.subarray(0, 3).equals(BOM)) return [`${dir}/${f} : BOM UTF-8 manquant`];
+    if (f.endsWith('.cmd') && /(^|[^\r])\n/.test(bytes.toString('latin1'))) return [`${dir}/${f} : fin de ligne sans CR`];
+    return [];
+  }));
 if (layout.length) {
-  console.error('✗ fichiers du Script de synchro mal enregistrés :\n' + layout.join('\n'));
+  console.error('✗ fichiers PowerShell ou cmd mal enregistrés :\n' + layout.join('\n'));
   process.exit(1);
 }
 

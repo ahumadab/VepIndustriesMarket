@@ -12,7 +12,8 @@
     "release": "node scripts/build.mjs release",
     "fixture": "node scripts/saved.mjs fixture",
     "report": "node scripts/saved.mjs report",
-    "probe": "node scripts/probe.mjs"
+    "probe": "node scripts/probe.mjs",
+    "staging": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/staging.ps1"
   },
   "devDependencies": {
     "fengari": "^0.1.4"
