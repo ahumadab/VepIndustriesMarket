@@ -1,8 +1,10 @@
-// Runs tests/test.lua with Fengari (Lua 5.3 in JS) and WoW API doubles. Exit code 1 on any failure.
+// Runs each tests/*.test.lua with Fengari (Lua 5.3 in JS) and the WoW API doubles of tests/doubles.lua, or only the
+// file given (node tests/run.cjs market.test.lua). Exit code 1 on any failure.
 // With "merge-case" (npm run merge-case), also rewrites the real case of merge-cases.json from Market.Merge, after a
 // change of the merge rule: the server replays the new expectations, from its copy in vepindustries-api, which
 // merge-case refreshes when that repo is cloned next to this one (AGENTS.md) and every run compares.
 const { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } = require('node:fs');
+const { basename } = require('node:path');
 const { lua, lauxlib, lualib, to_luastring } = require('fengari');
 process.chdir(__dirname);
 
@@ -46,25 +48,41 @@ if (layout.length) {
   process.exit(1);
 }
 
-const L = lauxlib.luaL_newstate();
-lualib.luaL_openlibs(L);
-// merge-cases.json, shared with the server, handed to test.lua as the global MERGE_CASES (numeric keys as numbers)
+// merge-cases.json, shared with the server, handed to each test file as the global MERGE_CASES (numeric keys as numbers)
 const toLua = (v) => (Array.isArray(v) ? `{${v.map(toLua).join(',')}}`
   : v && typeof v === 'object' ? `{${Object.entries(v).map(([k, x]) => `[${/^\d+$/.test(k) ? k : JSON.stringify(k)}]=${toLua(x)}`).join(',')}}`
     : JSON.stringify(v));
-lauxlib.luaL_dostring(L, to_luastring(`MERGE_CASES = ${toLua(JSON.parse(readFileSync('merge-cases.json', 'utf8')))}`));
-const failure = lauxlib.luaL_dofile(L, to_luastring('test.lua')) !== 0 && lua.lua_tojsstring(L, -1);
+const GLOBALS = `MERGE_CASES = ${toLua(JSON.parse(readFileSync('merge-cases.json', 'utf8')))}`
+  // and the addon's files, in the order of its .toc (loadAddon() in doubles.lua)
+  + `\nADDON_FILES = ${toLua(readFileSync('../src/VepIndustriesMarket.toc', 'utf8').split(/\r?\n/)
+    .filter((l) => /^[^#].*\.lua$/.test(l.trim())).map((l) => l.trim().replace(/\\/g, '/')))}`;
+// each test file in a fresh Lua state, after doubles.lua, then its done(); `node tests/run.cjs <file>` runs one
+const only = process.argv[2] && process.argv[2] !== 'merge-case' && basename(process.argv[2]);
+const failures = [];
+let realMergeCase;
+for (const file of only ? [only] : readdirSync('.').filter((f) => f.endsWith('.test.lua'))) {
+  console.log(`- ${file}`);
+  const L = lauxlib.luaL_newstate();
+  lualib.luaL_openlibs(L);
+  const step = (status) => {
+    if (status !== 0) failures.push(`${file} : ${lua.lua_tojsstring(L, -1)}`);
+    return status === 0;
+  };
+  if (step(lauxlib.luaL_dostring(L, to_luastring(GLOBALS))) && step(lauxlib.luaL_dofile(L, to_luastring('doubles.lua')))
+    && step(lauxlib.luaL_dofile(L, to_luastring(file)))) step(lauxlib.luaL_dostring(L, to_luastring('done()')));
+  lua.lua_getglobal(L, 'REAL_MERGE_CASE');
+  if (lua.lua_isstring(L, -1)) realMergeCase = lua.lua_tojsstring(L, -1);
+}
 if (process.argv[2] === 'merge-case') {
   // the real case, last of the file, rewritten in its layout: one comparison per line, one item per line
   const REAL = '    {\n      "name": "Comparaison réelle';
   const text = readFileSync('merge-cases.json', 'utf8');
   const at = text.indexOf(REAL);
-  lua.lua_getglobal(L, 'REAL_MERGE_CASE');
-  if (at < 0 || !lua.lua_isstring(L, -1)) {
-    console.error('✗ cas réel introuvable dans merge-cases.json ou non construit par test.lua');
+  if (at < 0 || !realMergeCase) {
+    console.error('✗ cas réel introuvable dans merge-cases.json ou non construit par market.test.lua');
     process.exit(1);
   }
-  const real = JSON.parse(lua.lua_tojsstring(L, -1));
+  const real = JSON.parse(realMergeCase);
   const name = text.slice(at).match(/"name": "([^"]*)"/)[1];
   const tranches = Object.entries(real.tranches)
     .map(([id, ks]) => `"${id}": { ${Object.entries(ks).map(([k, v]) => `"${k}": [${v.join(', ')}]`).join(', ')} }`);
@@ -89,7 +107,8 @@ if (process.argv[2] === 'merge-case' && existsSync(SERVER_CASES)) {
 } else if (!existsSync(SERVER_CASES) || readFileSync(SERVER_CASES, 'utf8') !== readFileSync('merge-cases.json', 'utf8')) {
   console.warn(`! merge-cases.json diffère de la copie du serveur ou elle est introuvable : ${SERVER_CASES}`);
 }
-if (failure) {
-  console.error('✗ ' + failure);
+if (failures.length) {
+  console.error('✗ ' + failures.join('\n✗ '));
   process.exit(1);
 }
+console.log('TOUT OK');
