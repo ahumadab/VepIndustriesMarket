@@ -2,8 +2,9 @@
 -- Saved in VepIndustriesMarketDB: fullScan = { time, items = { [itemID] = tiers string } } (latest full scan only)
 -- daily = { [itemID] = { [Auctionator day] = "price stock scans[ estimatedSales seconds]" } } (daily summary, its estimated
 -- sales merged by Tranche from the Comparisons) and comparisons = { { author, realm, faction, start, finish, items =
--- "itemID sold stock price,..." }, ... } (the latest, see addComparison and tests/merge-cases.json), author = their
--- author for the whole account.
+-- "itemID sold stock price,..." }, ... } (the latest, ours and those received in game, see addComparison and
+-- tests/merge-cases.json), seen = { [M.Id] = finish } (every Comparison kept in the last KEEP_COMPARISONS, even one the
+-- cap dropped since: not taken again from a friend), author = their author for the whole account.
 -- scripts/saved.mjs (npm run report, npm run fixture) parses these formats from the save: change it with them.
 local GM = VepIndustriesMarket
 local T = GM.Trend
@@ -18,7 +19,8 @@ M.DEMAND_DAYS, M.SATURATED_DAYS = 2, 7
 -- daily summary kept, the span of the /vim window: ~170 KB per day of scans, ~55 KB more with estimated sales,
 -- ~5.6 MB in all after 21 days (accepted)
 local KEEP_DAYS = 21
--- Comparisons kept a day at most, the MAX_COMPARISONS latest only, those the data file counts dropped first
+-- Comparisons kept a day at most, the MAX_COMPARISONS latest only, those the data file counts dropped first, then
+-- other players' (their author keeps them too)
 -- ponytail: count cap for the size of the save, drops uncounted ones past 6 h of scans without a Sync script
 M.MAX_COMPARISONS = 24
 local KEEP_COMPARISONS = 86400
@@ -35,6 +37,9 @@ local function counted(c)
     local f = VepIndustriesMarketData
     return f and f.counted and f.counted[c.author] and f.counted[c.author][c.start]
 end
+
+-- a Comparison's identity, its author and start: "author start"
+function M.Id(c) return c.author .. " " .. string.format("%d", c.start) end
 
 -- A tier (one per price, lot size and time left) is one token "<timeLeft><price>[.<size>][*<count>]", numbers in
 -- base 36, size and count omitted when 1, price as the gap from the previous tier of the item (sorted by price),
@@ -211,6 +216,69 @@ local function addComparison(db, c, day0)
     db.comparisons = kept
 end
 
+-- Drops the Comparisons past KEEP_COMPARISONS, then beyond MAX_COMPARISONS (counted by the data file first, then
+-- other players', then the oldest); remembers the kept ones in db.seen.
+local function prune(db, now)
+    local kept, seen = {}, db.seen or {}
+    for _, c in ipairs(db.comparisons or {}) do
+        if c.finish > now - KEEP_COMPARISONS then
+            kept[#kept + 1] = c
+            seen[M.Id(c)] = c.finish
+        end
+    end
+    while #kept > M.MAX_COMPARISONS do
+        local drop, other
+        for i, c in ipairs(kept) do
+            if counted(c) then drop = i; break end
+            if not other and c.author ~= db.author then other = i end
+        end
+        table.remove(kept, drop or other or 1)
+    end
+    for id, finish in pairs(seen) do
+        if finish <= now - KEEP_COMPARISONS then seen[id] = nil end
+    end
+    db.comparisons, db.seen = kept, seen
+end
+
+-- { [M.Id] = finish } of the Comparisons known to the account: kept, or kept in the last KEEP_COMPARISONS
+function M.Seen()
+    local db, seen = VepIndustriesMarketDB or {}, {}
+    for id, finish in pairs(db.seen or {}) do seen[id] = finish end
+    for _, c in ipairs(db.comparisons or {}) do seen[M.Id(c)] = c.finish end -- saves older than db.seen
+    return seen
+end
+
+-- Comparison `c` of another player, received in game (Exchange.lua) at time `now`: kept and merged by Tranche as ours,
+-- unless already known, malformed, or too old to keep. true when kept.
+function M.Receive(c, now)
+    local db, day0 = VepIndustriesMarketDB, T.Day0()
+    if not (db and day0 and type(c.author) == "string" and c.author ~= "" and type(c.realm) == "string"
+        and type(c.faction) == "string" and type(c.items) == "string" and type(c.start) == "number" and type(c.finish) == "number") then
+        return false
+    end
+    local gap = c.finish - c.start
+    if c.start % 1 ~= 0 or c.finish % 1 ~= 0 or gap < MIN_GAP or gap > MAX_GAP or c.finish <= now - KEEP_COMPARISONS
+        or M.Seen()[M.Id(c)] or (("," .. c.items):gsub(",%d+ [%d-]+ %d+ [%d-]+", "")) ~= "" then
+        return false
+    end
+    -- sharing a Tranche with a Comparison the cap dropped, its sales would add to that one's instead of averaging
+    local first, last = tranches(c, day0)
+    local kept = {}
+    for _, o in ipairs(db.comparisons or {}) do kept[M.Id(o)] = true end
+    for id, finish in pairs(db.seen or {}) do
+        local start = tonumber(id:match(" (%d+)$"))
+        if start and not kept[id] then
+            local a, b = tranches({ start = start, finish = finish }, day0)
+            if a <= last and b >= first then return false end
+        end
+    end
+    db.daily = db.daily or {}
+    addComparison(db, { author = c.author, realm = c.realm, faction = c.faction, start = c.start, finish = c.finish,
+        items = c.items }, day0)
+    prune(db, now)
+    return true
+end
+
 local function byPrice(a, b)
     if a.price ~= b.price then return a.price < b.price end
     if a.size ~= b.size then return a.size < b.size end
@@ -225,6 +293,7 @@ end
 -- by Tranche into the estimated sales of the daily summary. A scan
 -- without any auction is ignored; one less than MIN_GAP newer, or holding the same data (/vim relire), is not
 -- compared and keeps the stored scan's time, so that the next comparison spans the real time.
+-- true when it recorded a Comparison.
 function M.Ingest(scan, now, realm, faction, author)
     local db, day, day0 = VepIndustriesMarketDB, T.Today(now), T.Day0()
     if not db or not day then return end
@@ -273,18 +342,7 @@ function M.Ingest(scan, now, realm, faction, author)
         addComparison(db, { author = db.author, realm = realm, faction = faction, start = prev.time, finish = now,
             items = table.concat(entries, ",") }, day0)
     end
-    local kept = {}
-    for _, c in ipairs(db.comparisons or {}) do
-        if c.finish > now - KEEP_COMPARISONS then kept[#kept + 1] = c end
-    end
-    while #kept > M.MAX_COMPARISONS do
-        local drop = 1
-        for i, c in ipairs(kept) do
-            if counted(c) then drop = i; break end
-        end
-        table.remove(kept, drop)
-    end
-    db.comparisons = kept
+    prune(db, now)
     for id, days in pairs(daily) do
         for d in pairs(days) do
             if d <= day - KEEP_DAYS then days[d] = nil end
@@ -292,6 +350,7 @@ function M.Ingest(scan, now, realm, faction, author)
         if next(days) == nil then daily[id] = nil end
     end
     db.fullScan = { time = now, realm = realm, faction = faction, items = items }
+    return gap and true
 end
 
 -- { time, realm, faction, items, bytes } of the stored full scan (bytes: rough size on disk, daily summary and

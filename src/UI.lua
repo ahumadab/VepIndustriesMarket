@@ -360,7 +360,10 @@ SlashCmdList.VEPINDUSTRIESMARKET = function(arg)
         status()
     elseif cmd == "relire" then
         GM.Reread()
+    elseif cmd == "echange" then
+        GM.Exchange.Send(rest ~= "" and rest or nil)
     else
-        GM.Say("/vim (fenêtre) | /vim item <lien> | /vim unpin | /vim tooltip | /vim status | /vim relire")
+        GM.Say("/vim (fenêtre) | /vim item <lien> | /vim unpin | /vim tooltip | /vim status | /vim relire"
+            .. " | /vim echange [Prénom-Nom]")
     end
 end

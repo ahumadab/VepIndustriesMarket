@@ -6,7 +6,9 @@
 ## OptionalDeps: Auctionator
 ## SavedVariables: VepIndustriesMarketDB
 
+Libs\ChatThrottleLib.lua
 Trend.lua
 Market.lua
 Capture.lua
+Exchange.lua
 UI.lua

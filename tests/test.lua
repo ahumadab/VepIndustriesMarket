@@ -237,6 +237,33 @@ M.MAX_COMPARISONS = cap
 VepIndustriesMarketData = nil
 ok(M.StaleDays() == nil, "sans fichier de donnees : rien a signaler")
 
+-- Comparisons received in game (Exchange.lua): kept and merged by Tranche as ours, once; malformed or old ones refused
+VepIndustriesMarketDB = {}
+M.Ingest({ [943] = { tier(100, 1, 10, 3) } }, t2, "PvE", "Horde", "Boris")
+M.Ingest({ [943] = { tier(100, 1, 8, 3) } }, t2 + 1800, "PvE", "Horde", "Boris") -- 2 sold
+local friend = { author = "Ami", realm = "PvE", faction = "Horde", start = t2, finish = t2 + 1800, items = "943 4 6 100" }
+ok(M.Receive(friend, t2 + 1800) and not M.Receive(friend, t2 + 1800) and #VepIndustriesMarketDB.comparisons == 2
+  and near(M.Report(943).daily[TODAY].estimatedSales, 3) and M.Report(943).daily[TODAY].seconds == 1800,
+  "Comparaison recue : gardee une fois, moyenne avec la notre sur la Tranche")
+local function refused(changes, now)
+  local c = { author = "Autre" }
+  for k, v in pairs(friend) do if k ~= "author" then c[k] = v end end
+  for k, v in pairs(changes) do c[k] = v end
+  return not M.Receive(c, now or t2 + 1800)
+end
+ok(refused({ items = "943 4 6 100,oops" }) and refused({ items = "" }) and refused({ finish = t2 + 60 })
+  and refused({ finish = t2 + 9000 }) and refused({ start = tostring(t2) }) and refused({}, t2 + 1800 + 86400)
+  and #VepIndustriesMarketDB.comparisons == 2, "Comparaison recue malformee ou de plus de 24 h refusee")
+cap, M.MAX_COMPARISONS = M.MAX_COMPARISONS, 2
+M.Ingest({ [943] = { tier(100, 1, 7, 3) } }, t2 + 3600, "PvE", "Horde", "Boris")
+kept = VepIndustriesMarketDB.comparisons
+ok(#kept == 2 and kept[1].author == "Boris" and kept[2].author == "Boris" and M.Seen()["Ami " .. t2] == t2 + 1800,
+  "au-dela du plafond : Comparaisons des autres retirees avant les notres, gardees comme connues")
+ok(not M.Receive(friend, t2 + 3600), "Comparaison retiree par le plafond : pas reprise d'un ami")
+ok(not M.Receive({ author = "Tiers", realm = "PvE", faction = "Horde", start = t2 + 600, finish = t2 + 1500,
+  items = "943 1 6 100" }, t2 + 3600), "Comparaison recue sur la Tranche d'une Comparaison retiree : refusee (pas comptee deux fois)")
+M.MAX_COMPARISONS = cap
+
 -- verdict from reliable estimated sales: days the current stock lasts at that pace (provisional thresholds, #7)
 VepIndustriesMarketDB = {}
 ok(M.Report(14048).verdict == "saturated" and M.Report(14048).source == "trend", "14048 sature par la tendance")
@@ -384,6 +411,34 @@ GetRealmName = function() return "PvE" end
 UnitFactionGroup = function() return "Horde" end
 UnitName = function() return "Boris" end
 hooksecurefunc = function() end
+-- chat doubles for Exchange.lua and ChatThrottleLib: a clock, and sends recorded in outbox, or refused with the codes
+-- queued in refuse
+chat = { clock = 0, outbox = {}, refuse = {}, filters = {} }
+GetTime = function() return chat.clock end
+GetFramerate = function() return 60 end
+securecallfunction = function(fn, ...) return fn(...) end
+geterrorhandler = function() return function(e) chat.error = e end end
+table.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
+IsInInstance = function() return chat.instance end
+IsInGuild = function() return true end
+ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
+ChatFrameUtil = { AddMessageEventFilter = function(event, fn) chat.filters[event] = fn end }
+-- compression double: the text behind a \0, so that escaping shows
+C_EncodingUtil = {
+  CompressString = function(s) return "\0" .. s end,
+  DecompressString = function(s) assert(s:sub(1, 1) == "\0", "corrupted"); return s:sub(2) end,
+}
+C_ChatInfo = {
+  RegisterAddonMessagePrefix = function() end,
+  InChatMessagingLockdown = function() return chat.locked end,
+  SendAddonMessage = function(prefix, text, channel, target)
+    local code = table.remove(chat.refuse, 1) or 0
+    if code == 0 then
+      chat.outbox[#chat.outbox + 1] = { prefix = prefix, text = text, channel = channel, target = target, at = chat.clock }
+    end
+    return code
+  end,
+}
 local frames, textures = {}, {}
 -- texture double recording its color, height and visibility, to count the bars drawn
 local function texture()
@@ -414,17 +469,19 @@ local said = {}
 print = function(s) said[#said + 1] = s end
 local function lastSaid() return said[#said] or "" end
 -- as the game: only to the frames registered for the event
-local function fire(event, arg)
+local function fire(event, ...)
   for _, f in ipairs(frames) do
     local onEvent = rawget(f, "OnEvent")
-    if onEvent and f:IsEventRegistered(event) then onEvent(f, event, arg) end
+    if onEvent and f:IsEventRegistered(event) then onEvent(f, event, ...) end
   end
 end
 local okLoad, err = pcall(function()
+  dofile("../src/Libs/ChatThrottleLib.lua")
   local chunk = loadfile("../src/Capture.lua"); chunk("VepIndustriesMarket")
+  dofile("../src/Exchange.lua")
   dofile("../src/UI.lua")
 end)
-ok(okLoad, "chargement Capture.lua + UI.lua " .. tostring(err))
+ok(okLoad, "chargement ChatThrottleLib + Capture.lua + Exchange.lua + UI.lua " .. tostring(err))
 ok(postCall ~= nil, "hook infobulle enregistre")
 local lines = {}
 local tip = GameTooltip
@@ -627,6 +684,185 @@ Auctionator = nil
 local okNo, e5 = pcall(fire, "PLAYER_LOGIN")
 ok(okNo and lastSaid():find("Auctionator absent"), "sans Auctionator : message sans erreur " .. tostring(e5))
 Auctionator = auctionator
+
+-- exchange in game (#24): scripted guild members against our addon, through the real ChatThrottleLib and the doubles
+-- of C_ChatInfo. A game frame of 0.05 s runs the timers due, then ChatThrottleLib's OnUpdate.
+local X = VepIndustriesMarket.Exchange
+local timers = {}
+C_Timer = { After = function(delay, fn) timers[#timers + 1] = { at = chat.clock + delay, fn = fn } end }
+local function play(seconds)
+  local stop = chat.clock + seconds
+  while chat.clock < stop do
+    chat.clock = chat.clock + 0.05
+    local due, later = {}, {}
+    for _, t in ipairs(timers) do
+      if t.at <= chat.clock then due[#due + 1] = t else later[#later + 1] = t end
+    end
+    timers = later
+    for _, t in ipairs(due) do t.fn() end
+    local ctl = ChatThrottleLib.Frame
+    if ctl:IsShown() then rawget(ctl, "OnUpdate")(ctl, 0.05) end
+  end
+end
+local function heard(text, channel, sender) fire("CHAT_MSG_ADDON", X.PREFIX, text, channel, sender) end
+local function whisper(texts, sender, from, to)
+  for k = from or 1, to or #texts do heard(texts[k], "WHISPER", sender) end
+end
+-- our whispers to `name` since the outbox was emptied, of `kind` and `key` when given: { i, n, key, data, size, at }
+local function to(name, kind, key)
+  local got = {}
+  for _, m in ipairs(chat.outbox) do
+    local k, i, n, mkey, data = m.text:match("^(%u)(%d+) (%d+) ([^\t]*)\t(.*)$")
+    if m.target == name and (not kind or k == kind) and (not key or mkey == key) then
+      got[#got + 1] = { i = tonumber(i), n = tonumber(n), key = mkey, data = data, size = #m.text, at = m.at }
+    end
+  end
+  return got
+end
+-- the payload of whole messages, in order, nil when one is missing or out of place
+local function payload(msgs)
+  local data = {}
+  for k, m in ipairs(msgs) do
+    if m.i ~= k or m.n ~= #msgs then return nil end
+    data[k] = m.data
+  end
+  return #msgs > 0 and X.Unpack(table.concat(data)) or nil
+end
+local function guild()
+  local last
+  for _, m in ipairs(chat.outbox) do if m.channel == "GUILD" then last = m.text end end
+  return last
+end
+
+VepIndustriesMarketDB, VepIndustriesMarketData = {}, nil
+M.Ingest(rowsToScan(FULLSCAN_1121_2023), t2, "PvE", "Horde", "Boris")
+M.Ingest(rowsToScan(FULLSCAN_1121_2039), t2 + 919, "PvE", "Horde", "Boris")
+local mine = VepIndustriesMarketDB.comparisons[1]
+local MINE = "Boris " .. t2
+local theirs = { author = "Ami", realm = "PvE", faction = "Horde", start = t2 + 600, finish = t2 + 1519, items = mine.items }
+local THEIRS = "Ami " .. theirs.start
+local packed = X.Pack("C", THEIRS, X.Encode(theirs))
+play(10); chat.outbox = {} -- the announces of the tests above
+
+fire("PLAYER_LOGIN"); play(15)
+ok(guild() == "A 0 " .. (t2 + 919), "echange : annonce en guilde a la connexion " .. tostring(guild()))
+chat.outbox = {}
+heard("A 0 " .. theirs.finish, "GUILD", "Ami Epice"); play(1)
+ok(payload(to("Ami-Epice", "W")) == "1 0\n" .. MINE, "echange : annonce entendue -> inventaire chuchote, au nom Prenom-Nom")
+heard("A 0 0", "GUILD", "Boris"); heard("A 0 " .. theirs.finish, "PARTY", "Ami Epice")
+ok(#to("Boris") == 0 and #to("Ami-Epice") == 1, "echange : notre propre annonce et les autres canaux ignores")
+
+-- the friend's inventory lacks ours and lists one of theirs: ours goes, cut into messages, then our inventory
+chat.outbox = {}
+whisper(X.Pack("W", "", "1 0\n" .. THEIRS), "Ami Epice"); play(60)
+local sent, small = to("Ami-Epice", "C", MINE), true
+for _, m in ipairs(sent) do small = small and m.size <= 255 end
+ok(#sent > 10 and small and payload(sent) == X.Encode(mine),
+  string.format("echange : Comparaison decoupee en %d messages de 255 octets au plus, reassemblee a l'identique", #sent))
+ok(payload(to("Ami-Epice", "W")) == "0 0\n" .. MINE, "echange : notre inventaire en retour, l'autre ayant ce qui nous manque")
+local mineTexts = {}
+for k, m in ipairs(chat.outbox) do if m.text:find("^C") then mineTexts[#mineTexts + 1] = m.text end end
+
+-- the same Comparison sent back: already known, ignored; reassembled by a guild member without it, kept and announced
+whisper(mineTexts, "Ami Epice"); play(2)
+ok(#VepIndustriesMarketDB.comparisons == 1, "echange : Comparaison deja connue ignoree")
+local ours = VepIndustriesMarketDB
+VepIndustriesMarketDB, chat.outbox = {}, {}
+whisper(mineTexts, "Tiers Nom"); play(2)
+local got = VepIndustriesMarketDB.comparisons and VepIndustriesMarketDB.comparisons[1] or {}
+local early = guild()
+play(60)
+ok(got.author == "Boris" and got.start == t2 and got.finish == t2 + 919 and got.items == mine.items
+  and not early and guild() == "A 0 " .. (t2 + 919),
+  "echange : Comparaison reassemblee chez un autre, gardee, annoncee une minute apres la derniere recue")
+VepIndustriesMarketDB = ours
+-- before the auction house loads the data file, the time of the one the previous session loaded
+chat.outbox, VepIndustriesMarketDB.dataGenerated = {}, t2 - 600
+heard("A 0 " .. theirs.finish, "GUILD", "Ami Epice"); play(1)
+ok(payload(to("Ami-Epice", "W")) == "1 " .. (t2 - 600) .. "\n" .. MINE,
+  "echange : fichier de donnees pas encore charge, heure de celui de la session precedente")
+VepIndustriesMarketDB.dataGenerated = nil
+
+-- a transfer cut after 5 messages (the friend logged out): our next inventory tells it, the rest completes it
+chat.outbox = {}
+whisper(packed, "Ami Epice", 1, 5)
+heard("A 0 " .. theirs.finish, "GUILD", "Ami Epice"); play(1)
+local inv = payload(to("Ami-Epice", "W")) or ""
+ok(inv:find("\n" .. THEIRS .. " 5", 1, true), "echange : transfert interrompu, inventaire avec les morceaux recus " .. inv)
+chat.outbox = {}
+whisper(packed, "Ami Epice", 6); play(61)
+ok(#VepIndustriesMarketDB.comparisons == 2 and M.Seen()[THEIRS] == theirs.finish and guild() == "A 0 " .. theirs.finish,
+  "echange : transfert repris, Comparaison gardee et annoncee (relais)")
+-- our side resumed: the friend got 20 messages of ours
+chat.outbox = {}
+whisper(X.Pack("W", "", "0 0\n" .. THEIRS .. "\n" .. MINE .. " 20"), "Ami Epice"); play(60)
+sent = to("Ami-Epice", "C", MINE)
+ok(#sent > 0 and sent[1].i == 21 and sent[#sent].i == sent[1].n and #sent == sent[1].n - 20,
+  "echange : notre envoi repris au 21e message")
+-- the friend reloaded during our transfer: its new inventory, without the chunks it lost, restarts it
+chat.outbox = {}
+whisper(X.Pack("W", "", "0 0\n" .. MINE), "Huit Nom"); play(3)
+local cut = #to("Huit-Nom", "C", THEIRS)
+chat.outbox = {}
+whisper(X.Pack("W", "", "0 0\n" .. MINE), "Huit Nom"); play(60)
+ok(cut > 0 and cut < #packed and payload(to("Huit-Nom", "C", THEIRS)) == X.Encode(theirs),
+  "echange : destinataire relance pendant l'envoi, envoi repris du debut")
+
+-- relay: a member who has none gets ours and the friend's; one whose data file is newer than ours, the friend's only
+chat.outbox = {}
+whisper(X.Pack("W", "", "0 0"), "Tiers Nom"); whisper(X.Pack("W", "", "0 " .. (t2 + 1000)), "Quatre Nom"); play(120)
+ok(payload(to("Tiers-Nom", "C", MINE)) == X.Encode(mine) and payload(to("Tiers-Nom", "C", THEIRS)) == X.Encode(theirs),
+  "echange : Comparaison recue retransmise (relais)")
+ok(#to("Quatre-Nom", "C", MINE) == 0 and payload(to("Quatre-Nom", "C", THEIRS)) == X.Encode(theirs),
+  "echange : seules les Comparaisons posterieures au fichier de donnees de l'autre")
+
+-- refusals: for rate (3, 8), then a lockdown (InChatMessagingLockdown, code 11); sent again later, nothing lost
+chat.outbox, chat.refuse = {}, { 3, 3, 3, 8, 8 }
+whisper(X.Pack("W", "", "0 0\n" .. MINE), "Cinq Nom"); play(60)
+ok(#chat.refuse == 0 and payload(to("Cinq-Nom", "C", THEIRS)) == X.Encode(theirs), "echange : refus pour debit puis reprise")
+chat.outbox, chat.locked = {}, true
+whisper(X.Pack("W", "", "0 0\n" .. MINE), "Six Nom"); play(20)
+local during = #to("Six-Nom")
+chat.locked, chat.refuse = false, { 11, 11 }
+play(60)
+ok(during == 0 and #chat.refuse == 0 and payload(to("Six-Nom", "C", THEIRS)) == X.Encode(theirs),
+  "echange : blocage puis reprise")
+
+-- in an instance, a whisper a second at most (prefix allowance, wiki); outside, ChatThrottleLib's pace (~800 bytes/s)
+local function gaps(msgs)
+  local least, span = math.huge, msgs[#msgs].at - msgs[1].at
+  for k = 2, #msgs do least = math.min(least, msgs[k].at - msgs[k - 1].at) end
+  return least, span
+end
+local _, outside = gaps(to("Six-Nom", "C", THEIRS))
+chat.outbox, chat.instance = {}, true
+whisper(X.Pack("W", "", "0 0\n" .. MINE), "Sept Nom"); play(#packed + 10)
+chat.instance = nil
+local least = gaps(to("Sept-Nom", "C", THEIRS))
+ok(payload(to("Sept-Nom", "C", THEIRS)) and least >= 0.95 and outside < #packed * 0.6,
+  string.format("echange : en instance, %.2f s au moins entre deux messages ; hors instance, %d messages en %.1f s",
+    least, #packed, outside))
+
+-- /vim echange: our Comparisons whispered to ourselves come back, checked
+chat.outbox = {}
+SlashCmdList.VEPINDUSTRIESMARKET("echange"); play(60)
+local back, told = {}, lastSaid()
+for _, m in ipairs(chat.outbox) do if m.target == "Boris" then back[#back + 1] = m.text end end
+whisper(back, "Boris"); play(1)
+ok(told:find("2 Comparaison") and #back > #packed and lastSaid():find("revenue intacte")
+  and #VepIndustriesMarketDB.comparisons == 2, "/vim echange : Comparaisons chuchotees a soi-meme, revenues intactes " .. lastSaid())
+
+-- the friend left: the game's "No player named ..." is hidden and the transfer stops; other lines stay
+chat.outbox = {}
+SlashCmdList.VEPINDUSTRIESMARKET("echange Parti Loin"); play(3)
+local before = #to("Parti-Loin")
+local filter = chat.filters.CHAT_MSG_SYSTEM
+local hidden = filter and filter(nil, "CHAT_MSG_SYSTEM", ERR_CHAT_PLAYER_NOT_FOUND_S:format("Parti Loin"))
+local shown = filter and filter(nil, "CHAT_MSG_SYSTEM", ERR_CHAT_PLAYER_NOT_FOUND_S:format("Inconnu"))
+play(30)
+ok(before > 0 and hidden and not shown and #to("Parti-Loin") <= before + 1 and #to("Parti-Loin") < #packed,
+  "echange : « No player named » filtre pour un destinataire parti, transfert arrete (sauf le message deja confie a ChatThrottleLib)")
+ok(not chat.error, "echange : aucune erreur de ChatThrottleLib " .. tostring(chat.error))
 print = out
 
 ok(not yieldInPcall, "aucune coroutine ne cede dans un pcall (refuse par le Lua 5.1 du jeu) " .. tostring(yieldInPcall))

@@ -4,7 +4,7 @@ Addon WoW Forever (interface 16001) par VepIndustries : tendance prix/stock des 
 Chaque Scan complet d'Auctionator (mode replicate) est enregistré en forme compacte (dernier scan + résumé par objet et par jour, ~1 Mo).
 
 - Infobulle : `Tendance 7 j  Demande | Stable | Saturé  prix ±x %  stock ±y %  (n j)  ≈ N/jour` (ventes estimées sur 7 jours entre Scans complets à moins de 2 h d'écart, grisées tant qu'elles ne portent pas sur 2 jours, soit au moins 3 Scans complets)
-- `/vim` : fenêtre graphique 21 jours (Prix minimum en ligne ; Stock et Ventes estimées par jour en barres, grisées tant qu'elles ne sont pas fiables). `/vim item <lien>`, `/vim unpin`, `/vim tooltip`, `/vim status` (dernier Scan complet), `/vim relire` (développement : réenregistre le dernier Scan complet gardé en mémoire par le client, sans attendre les 15 min du serveur ; la mémoire est perdue à chaque `/reload`).
+- `/vim` : fenêtre graphique 21 jours (Prix minimum en ligne ; Stock et Ventes estimées par jour en barres, grisées tant qu'elles ne sont pas fiables). `/vim item <lien>`, `/vim unpin`, `/vim tooltip`, `/vim status` (dernier Scan complet), `/vim relire` (développement : réenregistre le dernier Scan complet gardé en mémoire par le client, sans attendre les 15 min du serveur ; la mémoire est perdue à chaque `/reload`), `/vim echange [Prénom-Nom]` (développement : chuchote nos Comparaisons par le vrai canal des addons, à soi-même par défaut, et dit si chacune revient intacte ; vers un joueur hors ligne, vérifie que « No player named » reste masqué).
 
 ## Script de synchro
 
@@ -17,6 +17,10 @@ Chaque Scan complet d'Auctionator (mode replicate) est enregistré en forme comp
 - Test : `tests/sync.cjs` (dans `npm test`, Windows seulement) installe une vraie tâche `VepIndustriesMarketTest` contre un faux serveur, puis la retire.
 
 **Repli si un antivirus bloque le script** : réécrire `Sync.ps1` en un petit exécutable (C# ou Go, sous-système Windows pour n'ouvrir aucune fenêtre) qui fait la même chose (mêmes fichiers, même API, même état). `installer.cmd` crée alors la tâche sur l'exécutable au lieu de `conhost`, et Boris signe l'exécutable ou le soumet à l'analyse de Microsoft (faux positif Defender) avant de le publier. Il ne télécharge toujours aucun code.
+
+## Échange en jeu
+
+Les membres de la guilde connectés qui ont l'addon s'échangent leurs Comparaisons sans `/reload`, avec ou sans Script de synchro (`src/Exchange.lua`, protocole en tête du fichier) : chacun s'annonce sur le canal de guilde à la connexion et après chaque nouvelle Comparaison, puis les autres lui envoient en chuchotement celles qui lui manquent et qui sont postérieures à son fichier de données. Une Comparaison reçue est gardée comme les nôtres (envoyée au VPS par le Script de synchro, retransmise aux membres connectés ensuite). Les envois passent par ChatThrottleLib (`src/Libs`, domaine public), à ~800 octets/s hors instance et un message par seconde en instance ; un refus pour débit ou un blocage pendant un combat les retarde sans rien perdre, et un transfert interrompu reprend au morceau atteint, tant que le destinataire n'a pas relancé le jeu. `npm run report` donne les Comparaisons gardées par auteur.
 
 ## Développement
 
