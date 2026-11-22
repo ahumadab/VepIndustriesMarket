@@ -10,7 +10,8 @@
     "deploy": "node scripts/build.mjs deploy",
     "release": "node scripts/build.mjs release",
     "fixture": "node scripts/saved.mjs fixture",
-    "report": "node scripts/saved.mjs report"
+    "report": "node scripts/saved.mjs report",
+    "probe": "node scripts/probe.mjs"
   },
   "devDependencies": {
     "fengari": "^0.1.4"

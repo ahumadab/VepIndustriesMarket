@@ -1,0 +1,6 @@
+## Interface: 16001
+## Title: VIM Probe (à la demande)
+## Notes: Chargé par /vimprobe lod. Data.lua est réécrit jeu ouvert par npm run probe stamp.
+## LoadOnDemand: 1
+
+Data.lua

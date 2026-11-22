@@ -118,7 +118,7 @@ L'addon de Boris diffuse ensuite en jeu ce que les autres n'ont pas. Le VPS n'a 
 
 ## 5. Incertitudes propres à Forever
 
-D'après le wiki, Forever est une version officielle de Blizzard qui « shares Mainline WoW's UI architecture, including the vast majority of APIs available in 12.1.5 ». Les restrictions de Midnight s'y appliquent aussi ([notes 1.60.1](https://warcraft.wiki.gg/wiki/Patch_1.60.1/API_changes)). Les limites de débit côté serveur, elles, ne sont documentées nulle part pour Forever. À vérifier en jeu, une seule fois, sans nouveau Scan complet :
+D'après le wiki, Forever est une version officielle de Blizzard qui « shares Mainline WoW's UI architecture, including the vast majority of APIs available in 12.1.5 ». Les restrictions de Midnight s'y appliquent aussi ([notes 1.60.1](https://warcraft.wiki.gg/wiki/Patch_1.60.1/API_changes)). Les limites de débit côté serveur, elles, ne sont documentées nulle part pour Forever. À vérifier en jeu, une seule fois, sans nouveau Scan complet. La sonde `tools/probe` (`npm run probe`, ticket #19) fait ces mesures et les enregistre :
 
 - **Débit par préfixe** : `/run local r={} for i=1,20 do r[i]=C_ChatInfo.SendAddonMessage("VIMTEST",("x"):rep(250),"GUILD") end print(table.concat(r," "))`. On attend dix `0` puis des `3`. Recommencer avec `"WHISPER", UnitName("player")` pour vérifier l'exemption des chuchotements.
 - **APIs présentes** : `/dump C_EncodingUtil ~= nil, C_BattleNet.SendGameData ~= nil, C_ChatInfo.InChatMessagingLockdown()`.
