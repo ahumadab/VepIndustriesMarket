@@ -13,7 +13,7 @@ Chaque Scan complet d'Auctionator (mode replicate) est enregistré en forme comp
 - Toutes les 15 minutes de la session Windows, sans fenêtre (`conhost --headless`) : rien à faire si aucune sauvegarde n'est plus récente que `Data.lua` ; sinon envoi des Comparaisons pas encore envoyées, par lots de 5, puis `Data.lua` de l'hôtel des ventes du dernier Scan complet.
 - La tâche se retire si le dossier de l'addon a disparu, ou après 30 jours sans nouvelle sauvegarde.
 - État dans `%LOCALAPPDATA%\VepIndustriesMarket` : `config.json` (adresse de l'API, code chiffré pour l'utilisateur Windows), `sent.txt` (Comparaisons envoyées), `sync.log` (un passage par ligne, erreurs comprises).
-- Staging : `installer.cmd -Api https://api-staging.vepindustries.com` depuis une console.
+- Staging : `npm run staging [-- -Seed]` (`tools/staging.ps1`) installe le Script de synchro sur le staging avec un Code de synchro créé par le jeton d'administrateur du presse-papiers, envoie au besoin la Comparaison réelle de `merge-cases.json`, puis écrit `Data.lua`. Retour en production : `installer.cmd` sans `-Api`.
 - Test : `tests/sync.cjs` (dans `npm test`, Windows seulement) installe une vraie tâche `VepIndustriesMarketTest` contre un faux serveur, puis la retire.
 
 **Repli si un antivirus bloque le script** : réécrire `Sync.ps1` en un petit exécutable (C# ou Go, sous-système Windows pour n'ouvrir aucune fenêtre) qui fait la même chose (mêmes fichiers, même API, même état). `installer.cmd` crée alors la tâche sur l'exécutable au lieu de `conhost`, et Boris signe l'exécutable ou le soumet à l'analyse de Microsoft (faux positif Defender) avant de le publier. Il ne télécharge toujours aucun code.
@@ -34,8 +34,8 @@ Les tests ne prouvent pas le rendu en jeu : vérifier avec `/reload` après chaq
 ## Structure
 
 - `src/` : l'addon tel qu'il est copié dans le jeu (`@version@` remplacé dans le `.toc`) ; `src/VepIndustriesMarket_Data/` devient un addon à côté de lui, dont le Script de synchro écrit le `Data.lua`
-- `tests/` : `test.lua`, `merge-cases.json` (cas de la fusion par Tranche, partagés avec le serveur ; `npm run merge-case` réécrit le cas réel après un changement de la règle), `fixtures/realdata.lua` (historique Auctionator réel exporté), `fixtures/fullscan.lua` (un objet sur dix du Scan complet réel du 21/11), `fixtures/fullscan-<MMJJ>-<HHMM>.lua` (les mêmes objets dans des Scans complets plus récents, nommés par leur date et heure, extraits des SavedVariables et de leur `.bak` par `npm run fixture`), `fixtures/comparisons.lua` (les Comparaisons d'une vraie sauvegarde, telles que le jeu les écrit, réduites aux mêmes objets, extraites une fois par `npm run fixture` et relues par `sync.cjs`)
-- `scripts/saved.mjs` : `npm run fixture`, et `npm run report` (ce que l'addon a enregistré depuis la sauvegarde précédente)
+- `tests/` : `test.lua`, `merge-cases.json` (cas de la fusion par Tranche, partagés avec le serveur ; `npm run merge-case` réécrit le cas réel après un changement de la règle), `fixtures/realdata.lua` (historique Auctionator réel exporté), `fixtures/fullscan.lua` (un objet sur dix du Scan complet réel du 21/11), `fixtures/fullscan-<MMJJ>-<HHMM>.lua` (les mêmes objets dans des Scans complets plus récents, nommés par leur date et heure, extraits des SavedVariables et de leur `.bak` par `npm run fixture`), `fixtures/comparisons.lua` (les Comparaisons d'une vraie sauvegarde, telles que le jeu les écrit, réduites aux mêmes objets, extraites une fois par `npm run fixture` et relues par `sync.cjs` ; l'addon les retire au bout de 24 h : `npm run report` signale une sauvegarde qui en contient tant que le fichier manque)
+- `scripts/saved.mjs` : `npm run fixture`, et `npm run report` (ce que l'addon a enregistré depuis la sauvegarde précédente, et le fichier de données chargé)
 - `scripts/build.mjs` : deploy / release
 
 Git : gitflow, voir `docs/agents/git-workflow.md`.

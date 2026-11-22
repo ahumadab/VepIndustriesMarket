@@ -36,10 +36,15 @@ if (mode === 'release') {
 // 3. build dist/<ADDON>, and dist/<ADDON>_Data from src/<ADDON>_Data: the addon loaded on demand that holds the Sync
 // script's data file (its Data.lua, written by the script only)
 const DATA = `${ADDON}_Data`;
+// emptied, not removed: Windows refuses to remove a folder another program holds open (Explorer, indexing,
+// antivirus), not to remove what it contains
+const empty = (dir) => {
+  mkdirSync(dir, { recursive: true });
+  for (const f of readdirSync(dir)) rmSync(join(dir, f), { recursive: true, force: true });
+};
 const build = (from, name) => {
   const out = join(root, 'dist', name);
-  rmSync(out, { recursive: true, force: true });
-  mkdirSync(out, { recursive: true });
+  empty(out);
   for (const f of readdirSync(from).filter((f) => f !== DATA)) {
     const src = join(from, f);
     if (f.endsWith('.toc')) writeFileSync(join(out, f), readFileSync(src, 'utf8').replace('@version@', version));
@@ -52,9 +57,11 @@ build(join(root, 'src', DATA), DATA);
 // 4. copy into the game, keeping the data file the Sync script wrote; a new addon folder shows in the game only after
 // a restart, not on /reload
 if (!existsSync(addons)) fail(`dossier AddOns introuvable : ${addons} (variable WOW_ADDONS)`);
-rmSync(join(addons, ADDON), { recursive: true, force: true });
+const added = [ADDON, DATA].filter((name) => !existsSync(join(addons, name)));
+empty(join(addons, ADDON));
 for (const name of [ADDON, DATA]) cpSync(join(root, 'dist', name), join(addons, name), { recursive: true });
-console.log(`✓ ${ADDON} ${version} -> ${addons}  (/reload en jeu)`);
+console.log(`✓ ${ADDON} ${version} -> ${addons}  `
+  + (added.length ? `(nouveau dossier ${added.join(', ')} : relance le jeu, /reload ne suffit pas)` : '(/reload en jeu)'));
 
 // 5. release artefacts
 if (mode === 'release') {
