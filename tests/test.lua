@@ -278,9 +278,12 @@ local later = { author = "Ami", start = real.start + 600, finish = real.finish +
 ok(sold(M.Merge({ real }, DAY0)) == 4227 and sold(M.Merge({ real, twin }, DAY0)) == 4227
   and sameTranches(M.Merge({ real, twin }, DAY0), M.Merge({ real }, DAY0)),
   "fusion des scans reels : seul, 4227 unites ; meme Comparaison chez un ami, pas comptee deux fois")
-local shifted = sold(M.Merge({ real, later }, DAY0))
-ok(shifted > 4227 and shifted < 2 * 4227, "fusion des scans reels : ami decale de 10 min, moyenne sur la Tranche commune ("
-  .. shifted .. ")")
+-- 10 min later the friend's Comparison sits in the second Tranche only: the first keeps our share alone, the second
+-- averages our share and all of the friend's units (same pair in tests/merge-cases.json, for the server)
+local first = 1800 - (real.start - DAY0) % 1800
+local expect = 4227 * (first / 919 + ((919 - first) / 919 + 1) / 2)
+ok(sold(M.Merge({ real, later }, DAY0)) == math.floor(expect + 0.5),
+  string.format("fusion des scans reels : ami decale de 10 min, moyenne sur la Tranche commune (%.1f)", expect))
 -- size of a real Comparison, extrapolated to the whole scan: the most kept must fit the save
 local kb = #real.items * FULLSCAN_TOTAL_ITEMS / FULLSCAN_ITEMS / 1000
 ok(kb * M.MAX_COMPARISONS < 4000, string.format("Comparaison reelle : %d Ko extrapoles, %d Ko pour %d", math.floor(kb),
