@@ -12,6 +12,10 @@ local COLOR = {
 }
 local PRICE, STOCK, SALES = { 1.00, 0.82, 0.00 }, { 0.45, 0.70, 1.00 }, { 0.30, 0.90, 0.40 }
 local TITLE = { 1.00, 0.82, 0.00 } -- tooltip label, the game's gold
+-- text only: muted (not reliable, day counts), bright (reliable values), a % change (neutral, good, bad), coins
+local TEXT = { muted = { 0.616, 0.616, 0.616 }, bright = { 1.00, 1.00, 1.00 }, neutral = { 0.80, 0.80, 0.80 },
+    good = { 0.40, 1.00, 0.40 }, bad = { 1.00, 0.40, 0.40 } }
+local COIN = { g = { 1.00, 0.844, 0.00 }, s = { 0.781, 0.781, 0.812 }, c = { 0.93, 0.648, 0.373 } }
 local function hex(c) return string.format("|cff%02x%02x%02x", math.floor(c[1] * 255), math.floor(c[2] * 255),
         math.floor(c[3] * 255)) end
 -- invert: for stock, more is bad for a seller (red)
@@ -19,7 +23,7 @@ local function pct(x, invert)
     if not x then return "?" end
     local v = math.floor(x * 100 + (x >= 0 and 0.5 or -0.5))
     local good = invert and v < 0 or (not invert and v > 0)
-    local c = v == 0 and "|cffcccccc" or (good and "|cff66ff66" or "|cffff6666")
+    local c = hex(v == 0 and TEXT.neutral or (good and TEXT.good or TEXT.bad))
     return string.format("%s%+d%%|r", c, v)
 end
 
@@ -39,10 +43,10 @@ function GM.TrendText(r)
     elseif v == "none" and trend.age and trend.age > M.WINDOW then
         txt = hex(COLOR.none) .. "Données vieilles de " .. trend.age .. " j|r"
     end
-    txt = txt .. string.format(" |cff9d9d9d(%d j)|r", (sales and r.estimatedSalesDays or trend.days) or 0)
+    txt = txt .. string.format(" %s(%d j)|r", hex(TEXT.muted), (sales and r.estimatedSalesDays or trend.days) or 0)
     local perDay = r.estimatedSalesPerDay
     if perDay then -- grey while not reliable
-        txt = txt .. "  " .. (r.confidence == "high" and "|cffffffff" or "|cff9d9d9d") .. "≈ " .. perDayText(perDay)
+        txt = txt .. "  " .. hex(r.confidence == "high" and TEXT.bright or TEXT.muted) .. "≈ " .. perDayText(perDay)
             .. "/jour|r"
     end
     return txt
@@ -159,9 +163,9 @@ local function money(c)
     c = math.floor(c)
     local g, s, cu = math.floor(c / 10000), math.floor(c / 100) % 100, c % 100
     local out = {}
-    if g > 0 then out[#out + 1] = g .. "|cffffd700g|r" end
-    if s > 0 or g > 0 then out[#out + 1] = s .. "|cffc7c7cfs|r" end
-    if cu > 0 or #out == 0 then out[#out + 1] = cu .. "|cffeda55fc|r" end
+    if g > 0 then out[#out + 1] = g .. hex(COIN.g) .. "g|r" end
+    if s > 0 or g > 0 then out[#out + 1] = s .. hex(COIN.s) .. "s|r" end
+    if cu > 0 or #out == 0 then out[#out + 1] = cu .. hex(COIN.c) .. "c|r" end
     return table.concat(out, " ")
 end
 
@@ -176,7 +180,7 @@ local function showDay(col)
     if h.price then GameTooltip:AddDoubleLine("Prix minimum", money(h.price), PRICE[1], PRICE[2], PRICE[3], 1, 1, 1) end
     if h.stock then GameTooltip:AddDoubleLine("Stock", tostring(h.stock), STOCK[1], STOCK[2], STOCK[3], 1, 1, 1) end
     if d.estimatedSalesPerDay then
-        GameTooltip:AddDoubleLine("Ventes estimées", (d.reliable and "|cffffffff" or "|cff9d9d9d") .. "≈ "
+        GameTooltip:AddDoubleLine("Ventes estimées", hex(d.reliable and TEXT.bright or TEXT.muted) .. "≈ "
             .. perDayText(d.estimatedSalesPerDay) .. "/jour" .. (d.reliable and "" or " (pas fiable)") .. "|r",
             SALES[1], SALES[2], SALES[3])
     end
@@ -203,7 +207,7 @@ function GM.ShowItem(itemID, force)
     if pinned and not force then return end
     current = itemID
     local name = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(itemID) or ("item " .. itemID)
-    nameFS:SetText((name or "?") .. (pinned and " |cff9d9d9d(figé)|r" or ""))
+    nameFS:SetText((name or "?") .. (pinned and " " .. hex(TEXT.muted) .. "(figé)|r" or ""))
     local r = M.Report(itemID)
     local hist, today = r.history, r.today
     hideAll()
@@ -217,8 +221,8 @@ function GM.ShowItem(itemID, force)
     end
     emptyFS:Hide()
     local last = hist[#hist]
-    verdictFS:SetText(GM.TrendText(r) .. "\n|cffffffffMin actuel|r " .. money(last.price) ..
-        "  |cff74b4ffstock|r " .. (last.stock or "?"))
+    verdictFS:SetText(GM.TrendText(r) .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
+        "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?"))
 
     local pts, maxP, minP, maxS = {}, 0, math.huge, 0
     for _, e in ipairs(hist) do

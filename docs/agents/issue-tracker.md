@@ -12,6 +12,7 @@ Issues and specs for this repo live as GitHub issues on `ahumadab/VepIndustriesM
 - **Close**: `gh issue close <number> --comment "..."`
 - **A pull request closes its ticket**: its body says `Closes #<n>`. `develop` is the default branch, so GitHub closes the ticket when the PR merges into it.
 - **A spec closes itself** once its last ticket closes (`.github/workflows/close-finished-specs.yml`): a spec still open after that points to a failed run of the workflow.
+- **A ticket waiting on data** (days of real scans, a measurement in game) names it under `## Blocked by`, with the earliest date it can be met.
 - **A PR meets another ticket's criterion**: comment on that ticket, naming the PR and the criterion, so whoever picks it up skips that work.
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.

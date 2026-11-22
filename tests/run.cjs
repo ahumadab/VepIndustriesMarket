@@ -17,6 +17,16 @@ if (lua53.length) {
   process.exit(1);
 }
 
+// CODING_STANDARDS.md, interface constants: every |cff colour code of src/UI.lua comes from hex() and a named colour.
+// Comments are blanked, strings kept; hex()'s own "|cff%02x..." template is the one allowed literal.
+const COMMENT = /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|--\[(=*)\[[\s\S]*?\]\2\]|--[^\n]*/g;
+const ui = readFileSync('../src/UI.lua', 'utf8').replace(COMMENT, (m, str) => str || m.replace(/[^\n]/g, ' '));
+const literals = ui.split('\n').flatMap((line, i) => (/\|cff(?!%02x)/.test(line) ? [`src/UI.lua:${i + 1}: ${line.trim()}`] : []));
+if (literals.length) {
+  console.error('✗ code couleur écrit en dur, à passer par hex() et une constante :\n' + literals.join('\n'));
+  process.exit(1);
+}
+
 const L = lauxlib.luaL_newstate();
 lualib.luaL_openlibs(L);
 if (lauxlib.luaL_dofile(L, to_luastring('test.lua')) !== 0) {
