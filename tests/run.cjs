@@ -33,7 +33,7 @@ if (literals.length) {
 // The Sync script's files: Windows PowerShell 5.1 reads a .ps1 without BOM in the ANSI code page (accents broken),
 // and cmd misreads a .cmd without CRLF. .editorconfig and .gitattributes set both; this catches an editor that didn't.
 const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
-const layout = readdirSync('../src').flatMap((f) => {
+const layout = readdirSync('../src').filter((f) => /\.(ps1|cmd)$/.test(f)).flatMap((f) => {
   const bytes = readFileSync(`../src/${f}`);
   if (f.endsWith('.ps1') && !bytes.subarray(0, 3).equals(BOM)) return [`src/${f} : BOM UTF-8 manquant`];
   if (f.endsWith('.cmd') && /(^|[^\r])\n/.test(bytes.toString('latin1'))) return [`src/${f} : fin de ligne sans CR`];

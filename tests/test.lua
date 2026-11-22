@@ -200,6 +200,37 @@ ok(near(rate(941), 86400 / 1800), "Comparaisons retirees : resume journalier int
 M.Ingest({ [941] = { tier(100, 1, 51, 3) } }, t2 + 86400 + (M.MAX_COMPARISONS + 2) * 900, "PvE", "Horde", "Boris")
 ok(#VepIndustriesMarketDB.comparisons == 0, "Comparaisons de plus de 24 h retirees")
 
+-- the Sync script's data file (VepIndustriesMarketData): its daily summary already counts the Comparisons it lists,
+-- ours absent from that list are merged on top
+VepIndustriesMarketDB = {}
+M.Ingest({ [942] = { tier(100, 1, 10, 3) } }, t2, "PvE", "Horde", "Boris")
+M.Ingest({ [942] = { tier(100, 1, 8, 3) } }, t2 + 1800, "PvE", "Horde", "Boris") -- 2 sold, counted by the server
+M.Ingest({ [942] = { tier(100, 1, 7, 3) } }, t2 + 3600, "PvE", "Horde", "Boris") -- 1 sold, not yet
+local alone = M.Report(942).daily[TODAY]
+ok(alone.estimatedSales == 3 and alone.seconds == 3600 and alone.price == 100, "sans fichier de donnees : nos ventes seules")
+VepIndustriesMarketData = { generated = t2 + 3000, counted = { Boris = { [t2] = true } }, daily = { [942] = {
+  [TODAY] = "90 12 2 6 3600",    -- ours and a friend's, merged by the server
+  [TODAY - 3] = "80 5 1 4 1800", -- a friend's only
+} } }
+local shared = M.Report(942).daily
+ok(near(shared[TODAY].estimatedSales, 7) and shared[TODAY].seconds == 5400 and shared[TODAY].price == 90
+  and shared[TODAY].stock == 12, "fichier de donnees : nos Comparaisons comptees une seule fois, les autres ajoutees")
+ok(shared[TODAY - 3].estimatedSales == 4 and shared[TODAY - 3].seconds == 1800 and shared[TODAY - 3].price == 80,
+  "fichier de donnees : jour d'un ami seul")
+ok(M.StaleDays() == nil, "fichier de donnees recent : pas de synchro arretee")
+VepIndustriesMarketData.generated = t2 - 4 * 86400
+ok(M.StaleDays() == 4, "fichier de donnees vieux de 4 jours, scan plus recent : synchro arretee")
+-- past the cap, Comparisons the server counted go first
+VepIndustriesMarketData.counted = { Boris = { [t2 + 1800] = true } }
+local cap = M.MAX_COMPARISONS
+M.MAX_COMPARISONS = 2
+M.Ingest({ [942] = { tier(100, 1, 6, 3) } }, t2 + 5400, "PvE", "Horde", "Boris")
+kept = VepIndustriesMarketDB.comparisons
+ok(#kept == 2 and kept[1].start == t2 and kept[2].start == t2 + 3600, "Comparaisons comptees par le serveur retirees d'abord")
+M.MAX_COMPARISONS = cap
+VepIndustriesMarketData = nil
+ok(M.StaleDays() == nil, "sans fichier de donnees : pas de synchro arretee")
+
 -- verdict from reliable estimated sales: days the current stock lasts at that pace (provisional thresholds, #7)
 VepIndustriesMarketDB = {}
 ok(M.Report(14048).verdict == "saturated" and M.Report(14048).source == "trend", "14048 sature par la tendance")
@@ -552,6 +583,20 @@ ok(lastSaid():find(FULLSCAN_ITEMS .. " objets") and #again.tiers == 389 and agai
 C_AuctionHouse.GetNumReplicateItems = function() return 0 end
 SlashCmdList.VEPINDUSTRIESMARKET("relire")
 ok(lastSaid():find("aucun Scan complet en mémoire"), "/vim relire sans scan en memoire")
+
+-- opening the auction house loads the data file (VepIndustriesMarket_Data, load on demand) once, and tells a file
+-- that a stopped Sync script left behind
+local loads = {}
+C_AddOns = { LoadAddOn = function(name)
+  loads[#loads + 1] = name
+  VepIndustriesMarketData = { generated = time() - 5 * 86400, daily = {}, counted = {} }
+  return true
+end }
+fire("AUCTION_HOUSE_SHOW"); fire("AUCTION_HOUSE_SHOW")
+ok(#loads == 1 and loads[1] == "VepIndustriesMarket_Data" and lastSaid():find("5 jours")
+  and lastSaid():find("installer.cmd"), "synchro arretee signalee a l'ouverture de l'hotel des ventes " .. lastSaid())
+ok(M.Report(5500).daily[TODAY].scans == 2, "fichier de donnees vide : notre resume journalier garde")
+VepIndustriesMarketData = nil
 
 -- incremental scan: warned once
 local before = #said

@@ -8,7 +8,7 @@ Chaque Scan complet d'Auctionator (mode replicate) est enregistré en forme comp
 
 ## Script de synchro
 
-`src/Sync.ps1` (Windows PowerShell 5.1) envoie au VPS les Comparaisons de la sauvegarde et écrit le fichier de données de l'addon, `Data.lua`. Un double-clic sur `installer.cmd`, dans le dossier de l'addon, demande le code d'invitation (créé par Boris : `POST /v1/sync-codes`) et crée la tâche planifiée `VepIndustriesMarket`, sans droits d'administrateur. Le code n'est redemandé que s'il est refusé.
+`src/Sync.ps1` (Windows PowerShell 5.1) envoie au VPS les Comparaisons de la sauvegarde et écrit le fichier de données de l'addon, `Data.lua`, dans l'addon `VepIndustriesMarket_Data`, chargé à la demande à la première ouverture de l'hôtel des ventes de la session : un fichier écrit jeu ouvert y est donc lu. L'addon s'appuie alors sur le Résumé journalier fusionné du fichier et y ajoute ses Comparaisons que le fichier ne compte pas encore ; il signale dans la discussion un fichier qui a plus de 3 jours de retard sur son dernier Scan complet (synchro arrêtée). Une mise à jour de l'addon par CurseForge efface `Data.lua` jusqu'au passage suivant. Un double-clic sur `installer.cmd`, dans le dossier de l'addon, demande le code d'invitation (créé par Boris : `POST /v1/sync-codes`) et crée la tâche planifiée `VepIndustriesMarket`, sans droits d'administrateur. Le code n'est redemandé que s'il est refusé.
 
 - Toutes les 15 minutes de la session Windows, sans fenêtre (`conhost --headless`) : rien à faire si aucune sauvegarde n'est plus récente que `Data.lua` ; sinon envoi des Comparaisons pas encore envoyées, par lots de 5, puis `Data.lua` de l'hôtel des ventes du dernier Scan complet.
 - La tâche se retire si le dossier de l'addon a disparu, ou après 30 jours sans nouvelle sauvegarde.
@@ -23,7 +23,7 @@ Chaque Scan complet d'Auctionator (mode replicate) est enregistré en forme comp
 ```bash
 npm install
 npm test          # logique + smoke test UI (Fengari + doublures de l'API WoW)
-npm run deploy    # tests -> copie dans AddOns/VepIndustriesMarket (version x.y.z-dev+sha)
+npm run deploy    # tests -> copie dans AddOns/VepIndustriesMarket et AddOns/VepIndustriesMarket_Data (version x.y.z-dev+sha, Data.lua gardé)
 npm run release   # sur main uniquement : idem + zip dans dist/ + tag git vX.Y.Z
 ```
 
@@ -33,7 +33,7 @@ Les tests ne prouvent pas le rendu en jeu : vérifier avec `/reload` après chaq
 
 ## Structure
 
-- `src/` : l'addon tel qu'il est copié dans le jeu (`@version@` remplacé dans le `.toc`)
+- `src/` : l'addon tel qu'il est copié dans le jeu (`@version@` remplacé dans le `.toc`) ; `src/VepIndustriesMarket_Data/` devient un addon à côté de lui, dont le Script de synchro écrit le `Data.lua`
 - `tests/` : `test.lua`, `merge-cases.json` (cas de la fusion par Tranche, partagés avec le serveur ; `npm run merge-case` réécrit le cas réel après un changement de la règle), `fixtures/realdata.lua` (historique Auctionator réel exporté), `fixtures/fullscan.lua` (un objet sur dix du Scan complet réel du 21/11), `fixtures/fullscan-<MMJJ>-<HHMM>.lua` (les mêmes objets dans des Scans complets plus récents, nommés par leur date et heure, extraits des SavedVariables et de leur `.bak` par `npm run fixture`), `fixtures/comparisons.lua` (les Comparaisons d'une vraie sauvegarde, telles que le jeu les écrit, réduites aux mêmes objets, extraites une fois par `npm run fixture` et relues par `sync.cjs`)
 - `scripts/saved.mjs` : `npm run fixture`, et `npm run report` (ce que l'addon a enregistré depuis la sauvegarde précédente)
 - `scripts/build.mjs` : deploy / release

@@ -18,12 +18,23 @@ M.DEMAND_DAYS, M.SATURATED_DAYS = 2, 7
 -- daily summary kept, the span of the /vim window: ~170 KB per day of scans, ~55 KB more with estimated sales,
 -- ~5.6 MB in all after 21 days (accepted)
 local KEEP_DAYS = 21
--- Comparisons kept until the VPS counts them (#23; a day at most until then), the MAX_COMPARISONS latest only
--- ponytail: count cap for the size of the save, drops uncounted ones past 6 h of scans; drop counted ones first with #23
+-- Comparisons kept a day at most, the MAX_COMPARISONS latest only, those the data file counts dropped first
+-- ponytail: count cap for the size of the save, drops uncounted ones past 6 h of scans without a Sync script
 M.MAX_COMPARISONS = 24
 local KEEP_COMPARISONS = 86400
 -- Tranche: a fixed half hour of the day, unit of the merge of Comparisons
 local TRANCHE = 1800
+-- days a data file may lag behind the stored full scan before the Sync script counts as stopped
+M.STALE_DAYS = 3
+
+-- The Sync script's data file (VepIndustriesMarket_Data, loaded on demand when the auction house opens), nil before:
+-- VepIndustriesMarketData = { generated (Unix seconds), daily (the server's merge of every author, laid out as ours,
+-- its price, stock and third number from Comparisons only), counted = { [author] = { [start] = true } }, the
+-- Comparisons that summary counts }. Written by vepindustries-api: packages/contract/src/market.ts.
+local function counted(c)
+    local f = VepIndustriesMarketData
+    return f and f.counted and f.counted[c.author] and f.counted[c.author][c.start]
+end
 
 -- A tier (one per price, lot size and time left) is one token "<timeLeft><price>[.<size>][*<count>]", numbers in
 -- base 36, size and count omitted when 1, price as the gap from the previous tier of the item (sorted by price),
@@ -263,7 +274,13 @@ function M.Ingest(scan, now, realm, faction, author)
     for _, c in ipairs(db.comparisons or {}) do
         if c.finish > now - KEEP_COMPARISONS then kept[#kept + 1] = c end
     end
-    while #kept > M.MAX_COMPARISONS do table.remove(kept, 1) end
+    while #kept > M.MAX_COMPARISONS do
+        local drop = 1
+        for i, c in ipairs(kept) do
+            if counted(c) then drop = i; break end
+        end
+        table.remove(kept, drop)
+    end
     db.comparisons = kept
     for id, days in pairs(daily) do
         for d in pairs(days) do
@@ -289,6 +306,60 @@ function M.Status()
     return { time = fs.time, realm = fs.realm, faction = fs.faction, items = items, bytes = bytes }
 end
 
+-- Days since the data file was generated, when the stored full scan is more than STALE_DAYS newer: the Sync script
+-- answers a save within 15 min. nil otherwise, and without a file or a full scan.
+-- ponytail: warns wrongly on a relaunch within 15 min of a first session after STALE_DAYS away; tell the time of the
+-- save the file answers in the file if that bothers anyone
+function M.StaleDays()
+    local file, fs = VepIndustriesMarketData, VepIndustriesMarketDB and VepIndustriesMarketDB.fullScan
+    if file and file.generated and fs and fs.time - file.generated > M.STALE_DAYS * 86400 then
+        return math.floor((time() - file.generated) / 86400)
+    end
+end
+
+-- the entry "itemID sold stock price" of item `id` in a Comparison's items, nil when it holds none
+local function itemEntry(items, id)
+    local key = id .. " "
+    if items:sub(1, #key) == key then return items:match("^[^,]+") end
+    local at = items:find("," .. key, 1, true)
+    return at and items:match("^[^,]+", at + 1)
+end
+
+-- Daily summary of item `id`: ours alone without a data file. With one, the file's (every author's Comparisons it
+-- counts), our Comparisons it doesn't count merged on top, and the prices and stocks of our own full scans.
+-- ponytail: added, not averaged by Tranche with the counted ones (the file holds days only): those mostly come after
+-- the file, so seldom share a Tranche with them
+local function dailyOf(db, id)
+    local daily = {}
+    for d, v in pairs(db.daily and db.daily[id] or {}) do daily[d] = readDay(v) end
+    local file = VepIndustriesMarketData
+    if not file then return daily end
+    for _, e in pairs(daily) do e.estimatedSales, e.seconds = 0, 0 end -- they count the file's Comparisons
+    for d, v in pairs(file.daily and file.daily[id] or {}) do
+        local f, e = readDay(v), daily[d]
+        if e and f.stock then
+            e.price = e.price and f.price and math.min(e.price, f.price) or e.price or f.price
+            e.stock, e.scans = math.max(e.stock, f.stock), math.max(e.scans, f.scans)
+            e.estimatedSales, e.seconds = f.estimatedSales, f.seconds
+        elseif f.stock then
+            daily[d] = f
+        end
+    end
+    local mine, day0 = {}, T.Day0()
+    for _, c in ipairs(db.comparisons or {}) do
+        local entry = not counted(c) and itemEntry(c.items, id)
+        if entry then mine[#mine + 1] = { author = c.author, start = c.start, finish = c.finish, items = entry } end
+    end
+    for _, ks in pairs(day0 and M.Merge(mine, day0) or {}) do
+        for k, v in pairs(ks) do
+            local d = math.floor(k * TRANCHE / 86400)
+            local e = daily[d] or readDay("- 0 0")
+            daily[d], e.estimatedSales, e.seconds = e, e.estimatedSales + v[1], e.seconds + v[2]
+        end
+    end
+    return daily
+end
+
 -- { verdict, source, trend = { price, stock, days, age }, estimatedSalesPerDay, estimatedSalesDays (compared days in
 -- the window), confidence, history, today, tiers, daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
 -- (source "trend"); the stock they are set against is the item's in the latest full scan, 0 when absent.
@@ -303,10 +374,9 @@ function M.Report(itemID)
     local r = T.Compute(hist, today) or { verdict = "none", days = 0 }
     local db = VepIndustriesMarketDB or {}
     local encoded = db.fullScan and db.fullScan.items[itemID]
-    local daily, days, units, seconds = {}, 0, 0, 0
+    local daily, days, units, seconds = dailyOf(db, itemID), 0, 0, 0
     local function inWindow(d) return today and d > today - M.WINDOW end
-    for d, v in pairs(db.daily and db.daily[itemID] or {}) do
-        daily[d] = readDay(v)
+    for d in pairs(daily) do
         if inWindow(d) and daily[d].seconds > 0 then
             days, units, seconds = days + 1, units + daily[d].estimatedSales, seconds + daily[d].seconds
         end
