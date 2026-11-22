@@ -1,6 +1,6 @@
 {
   "name": "vepindustries-market",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "VepIndustries Market - WoW Forever addon: auction house price/stock trends",
   "type": "module",
