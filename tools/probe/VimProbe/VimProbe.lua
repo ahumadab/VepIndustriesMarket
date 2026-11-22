@@ -9,7 +9,11 @@ local DURATION, TICKS = 20, 100 -- then TICKS tries over DURATION seconds: 1 250
 local LATE = 3                  -- seconds left for the last messages to come back before the summary
 local COMBAT_TRY = 5            -- seconds between two sends during a fight in an instance
 
-local me = UnitName("player")
+-- Whispering the bare name to self answered "No player named ..." on Forever: use Name-Realm.
+local function me()
+  local realm = GetNormalizedRealmName()
+  return realm and (UnitName("player") .. "-" .. realm) or UnitName("player")
+end
 
 local function safe(v)
   if issecret and issecret(v) then return "secret" end
@@ -103,7 +107,7 @@ local function startFight(boss)
   fight = { boss = boss, tries = 0, refused = {}, locked = {} }
   local function try()
     fight.tries = fight.tries + 1
-    local code = send("combat", "WHISPER", me, FIGHT_PREFIX)
+    local code = send("combat", "WHISPER", me(), FIGHT_PREFIX)
     if code ~= 0 then fight.refused[tostring(code)] = (fight.refused[tostring(code)] or 0) + 1 end
     fight.locked[lockdown()] = true
   end
@@ -169,7 +173,7 @@ SLASH_VIMPROBE1 = "/vimprobe"
 SlashCmdList.VIMPROBE = function(msg)
   local cmd, arg = msg:match("^(%S*)%s*(.-)$")
   if cmd == "guilde" then rate("GUILD")
-  elseif cmd == "chuchot" then rate("WHISPER", arg ~= "" and arg or me)
+  elseif cmd == "chuchot" then rate("WHISPER", arg ~= "" and arg or me())
   elseif cmd == "absent" and arg ~= "" then absent(arg) -- a real character, offline
   elseif cmd == "api" then api()
   elseif cmd == "lod" then lod()
