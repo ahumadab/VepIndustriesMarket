@@ -4,7 +4,7 @@
 //                   once, the save's Comparisons to tests/fixtures/comparisons.lua, which tests/sync.cjs reads.
 // npm run report  : what the addon recorded since the previous save: estimated sales, the items selling most with
 //                   their stock and lowest price moves between the two saved scans, errors, the data file loaded,
-//                   and a reminder to capture the Comparisons fixture while the save holds Comparisons.
+//                   the Comparisons kept by author, and a reminder to capture the Comparisons fixture while the save holds Comparisons.
 // Game folder: env WOW_ADDONS, as for deploy; the first account holding VepIndustriesMarket.lua is read.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -50,12 +50,16 @@ function read(file) {
   const errorsAt = sv.indexOf('["errors"] = {');
   const errors = errorsAt < 0 ? []
     : [...sv.slice(errorsAt, sv.indexOf('\n}', errorsAt)).matchAll(/^"(.*)",$/gm)].map((m) => m[1]);
-  // the data file loaded this session (src/Capture.lua), and the Comparisons: only they hold a "start" key
+  // the data file loaded this session (src/Capture.lua), and the Comparisons: only they hold a "start" key; their
+  // authors, ours and those received in game (src/Exchange.lua)
   const loaded = sv.match(/\["dataFile"\] = \{\n([^}]*)\}/);
   const field = (k) => Number(loaded[1].match(new RegExp(`\\["${k}"\\] = (\\d+)`))?.[1]);
+  const block = sv.match(/\["comparisons"\] = \{\n(?:\{\n(?:\["\w+"\] = [^\n]*\n)*\},?[^\n]*\n)*\}/);
+  const authors = {};
+  for (const [, a] of (block ? block[0] : '').matchAll(/\["author"\] = "([^"]*)"/g)) authors[a] = (authors[a] || 0) + 1;
   return { time: Number(sv.slice(at).match(/\["time"\] = (\d+)/)[1]), items, daily, errors,
     dataFile: loaded && { generated: field('generated'), items: field('items') },
-    comparisons: (sv.match(/\["start"\] = /g) || []).length };
+    comparisons: (sv.match(/\["start"\] = /g) || []).length, authors };
 }
 
 const current = read(saved), previous = read(`${saved}.bak`);
@@ -97,6 +101,8 @@ if (mode === 'fixture') {
   const df = current.dataFile;
   console.log(df ? `Fichier de données chargé : produit le ${new Date(df.generated * 1000).toLocaleString('fr-FR')}, `
     + `${df.items} objets` : 'Fichier de données : aucun chargé (hôtel des ventes pas ouvert, ou Data.lua absent)');
+  const authors = Object.entries(current.authors).map(([a, n]) => `${a} ${n}`).join(', ');
+  console.log(`Comparaisons gardées par auteur (les autres reçues en jeu) : ${authors || 'aucune'}`);
   if (current.comparisons && !existsSync(join(root, 'tests/fixtures/comparisons.lua'))) {
     console.log(`! ${current.comparisons} Comparaisons dans la sauvegarde, pas de tests/fixtures/comparisons.lua : `
       + 'npm run fixture maintenant (l\'addon les retire au bout de 24 h)');

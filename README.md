@@ -18,6 +18,10 @@ Chaque Scan complet d'Auctionator (mode replicate) est enregistré en forme comp
 
 **Repli si un antivirus bloque le script** : réécrire `Sync.ps1` en un petit exécutable (C# ou Go, sous-système Windows pour n'ouvrir aucune fenêtre) qui fait la même chose (mêmes fichiers, même API, même état). `installer.cmd` crée alors la tâche sur l'exécutable au lieu de `conhost`, et Boris signe l'exécutable ou le soumet à l'analyse de Microsoft (faux positif Defender) avant de le publier. Il ne télécharge toujours aucun code.
 
+## Échange en jeu
+
+Les membres de la guilde connectés qui ont l'addon s'échangent leurs Comparaisons sans `/reload`, avec ou sans Script de synchro (`src/Exchange.lua`, protocole en tête du fichier) : chacun s'annonce sur le canal de guilde à la connexion et après chaque nouvelle Comparaison, puis les autres lui envoient en chuchotement celles qui lui manquent et qui sont postérieures à son fichier de données. Une Comparaison reçue est gardée comme les nôtres (envoyée au VPS par le Script de synchro, retransmise aux membres connectés ensuite). Les envois passent par ChatThrottleLib (`src/Libs`, domaine public), à ~800 octets/s hors instance et un message par seconde en instance ; un refus pour débit ou un blocage pendant un combat les retarde sans rien perdre, et un transfert interrompu reprend au morceau atteint, tant que le destinataire n'a pas relancé le jeu. `npm run report` donne les Comparaisons gardées par auteur.
+
 ## Développement
 
 ```bash

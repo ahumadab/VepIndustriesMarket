@@ -44,23 +44,35 @@ local SETUP = "les Ventes estimées demandent un Scan complet à l'ouverture de 
     .. "d'Auctionator, coche « Run autoscan when Auction House is opened » et, dans Advanced, « Use alternate slower "
     .. "scan mode by default »."
 
--- A full scan (~300k auctions) freezes the game for seconds in one go: conversion and Market.Ingest run in a
--- coroutine resumed once per frame, both yielding every few thousand auctions or hundred items.
-local running
+-- A full scan (~300k auctions) freezes the game for seconds in one go, merging a received Comparison for a fraction
+-- of one: each job runs in a coroutine resumed once per frame (conversion and Market yield every few thousand
+-- auctions or hundred items), one job after the other, so that no two change the save at once.
+local jobs = {}
+local function step()
+    local job = jobs[1]
+    local ok, e = coroutine.resume(job.co)
+    if ok and coroutine.status(job.co) ~= "dead" then return C_Timer.After(0, step) end
+    if not ok then logErr(job.where, e) end
+    table.remove(jobs, 1)
+    if jobs[1] then C_Timer.After(0, step) end
+end
+-- runs fn() after the jobs queued before it, errors logged under `where`
+function GM.Run(where, fn)
+    jobs[#jobs + 1] = { where = where, co = coroutine.create(fn) }
+    if #jobs == 1 then step() end
+end
+
 local function ingest(n, get)
-    if running then return GM.Say("un Scan complet est déjà en cours d'enregistrement.") end
-    GM.Say(string.format("enregistrement du Scan complet en cours (%d enchères)…", n))
-    running = coroutine.create(function()
-        M.Ingest(toFullScan(n, get), time(), GetRealmName(), UnitFactionGroup("player"), UnitName("player"))
-        GM.Say(string.format("Scan complet enregistré : %d objets (/reload pour sauvegarder).", M.Status().items))
-    end)
-    local function step()
-        local ok, e = coroutine.resume(running)
-        if ok and coroutine.status(running) ~= "dead" then return C_Timer.After(0, step) end
-        running = nil
-        if not ok then logErr("scan", e) end
+    for _, job in ipairs(jobs) do
+        if job.where == "scan" then return GM.Say("un Scan complet est déjà en cours d'enregistrement.") end
     end
-    step()
+    GM.Say(string.format("enregistrement du Scan complet en cours (%d enchères)…", n))
+    GM.Run("scan", function()
+        local compared = M.Ingest(toFullScan(n, get), time(), GetRealmName(), UnitFactionGroup("player"),
+            UnitName("player"))
+        GM.Say(string.format("Scan complet enregistré : %d objets (/reload pour sauvegarder).", M.Status().items))
+        if compared then GM.Exchange.Announce() end
+    end)
 end
 
 local warned = false -- incremental scans: once per session
