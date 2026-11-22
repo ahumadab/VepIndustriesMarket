@@ -293,7 +293,9 @@ end
 -- by Tranche into the estimated sales of the daily summary. A scan
 -- without any auction is ignored; one less than MIN_GAP newer, or holding the same data (/vim relire), is not
 -- compared and keeps the stored scan's time, so that the next comparison spans the real time.
--- true when it recorded a Comparison.
+-- Returns true, nil, the seconds compared when it recorded a Comparison; otherwise false, the reason ("first": no
+-- stored scan, "otherHouse", "tooSoon": under MIN_GAP, "same": same data, "tooLate": over MAX_GAP) and the
+-- seconds since the stored scan (nil for "first" and "otherHouse"). nil when the scan is ignored (no auction).
 function M.Ingest(scan, now, realm, faction, author)
     local db, day, day0 = VepIndustriesMarketDB, T.Today(now), T.Day0()
     if not db or not day then return end
@@ -316,9 +318,16 @@ function M.Ingest(scan, now, realm, faction, author)
     db.author = db.author or author
     db.daily = db.daily or {}
     local prev, daily = db.fullScan, db.daily
-    local gap = prev and prev.realm == realm and prev.faction == faction and now - prev.time
-    if gap and (gap < MIN_GAP or sameItems(prev.items, items)) then now, gap = prev.time, nil end
-    if gap and gap > MAX_GAP then gap = nil end
+    local reason = not prev and "first" or (prev.realm ~= realm or prev.faction ~= faction) and "otherHouse" or nil
+    local elapsed = not reason and now - prev.time or nil
+    local gap = elapsed
+    if gap and sameItems(prev.items, items) then
+        reason, now, gap = "same", prev.time, nil
+    elseif gap and gap < MIN_GAP then
+        reason, now, gap = "tooSoon", prev.time, nil
+    elseif gap and gap > MAX_GAP then
+        reason, gap = "tooLate", nil
+    end
     local before, entries = gap and prev.items or {}, {}
     local function entry(id, sold, stock, price)
         entries[#entries + 1] = string.format("%d %s %d %s", id, sold and string.format("%d", sold) or "-", stock,
@@ -350,7 +359,17 @@ function M.Ingest(scan, now, realm, faction, author)
         if next(days) == nil then daily[id] = nil end
     end
     db.fullScan = { time = now, realm = realm, faction = faction, items = items }
-    return gap and true
+    if gap then return true, nil, gap end
+    return false, reason, elapsed
+end
+
+-- the server's least gap between two full scans
+local SERVER_GAP = 900
+
+-- first and last time a full scan would be compared with the stored one (Unix seconds), nil without one
+function M.NextScan()
+    local fs = VepIndustriesMarketDB and VepIndustriesMarketDB.fullScan
+    if fs then return fs.time + math.max(MIN_GAP, SERVER_GAP), fs.time + MAX_GAP end
 end
 
 -- { time, realm, faction, items, bytes } of the stored full scan (bytes: rough size on disk, daily summary and
