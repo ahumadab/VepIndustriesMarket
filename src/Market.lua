@@ -1,7 +1,8 @@
 -- VepIndustriesMarket market: the single entry point the UI reads. No UI, testable outside the game.
 -- Saved in VepIndustriesMarketDB: fullScan = { time, items = { [itemID] = tiers string } } (latest full scan only)
--- and daily = { [itemID] = { [Auctionator day] = "price stock scans[ estimatedSales seconds]" } } (daily summary, mergeable
--- between players).
+-- daily = { [itemID] = { [Auctionator day] = "price stock scans[ estimatedSales seconds]" } } (daily summary, its estimated
+-- sales merged by Tranche from the Comparisons) and comparisons = { { author, realm, faction, start, finish, items =
+-- "itemID sold stock price,..." }, ... } (the latest, see addComparison and tests/merge-cases.json).
 local GM = VepIndustriesMarket
 local T = GM.Trend
 GM.Market = GM.Market or {}
@@ -15,6 +16,12 @@ M.DEMAND_DAYS, M.SATURATED_DAYS = 2, 7
 -- daily summary kept, the span of the /vim window: ~170 KB per day of scans, ~55 KB more with estimated sales,
 -- ~5.6 MB in all after 21 days (accepted)
 local KEEP_DAYS = 21
+-- Comparisons kept until the VPS counts them (#21; a day at most until then), the MAX_COMPARISONS latest only
+-- ponytail: count cap for the size of the save, drops uncounted ones past 6 h of scans; drop counted ones first with #21
+M.MAX_COMPARISONS = 24
+local KEEP_COMPARISONS = 86400
+-- Tranche: a fixed half hour of the day, unit of the merge of Comparisons
+local TRANCHE = 1800
 
 -- A tier (one per price, lot size and time left) is one token "<timeLeft><price>[.<size>][*<count>]", numbers in
 -- base 36, size and count omitted when 1, price as the gap from the previous tier of the item (sorted by price),
@@ -51,21 +58,35 @@ end
 -- daily summary of one day: "price stock scans[ estimatedSales seconds]" <-> { price, stock, scans, estimatedSales,
 -- seconds }. price "-" when the item sold out (absent from a scan after being in the previous one); estimatedSales:
 -- units bought over `seconds` of compared scans, both 0 (omitted) when no scan of the day was compared.
+-- Both may hold decimals: they are averages over the authors of each Tranche.
 local function readDay(v)
-    local p, s, n, u, e = (v or ""):match("^(%S+) (%d+) (%d+) ?(%d*) ?(%d*)$")
+    local p, s, n, u, e = (v or ""):match("^(%S+) (%d+) (%d+) ?([%d.]*) ?([%d.]*)$")
     return { price = tonumber(p), stock = tonumber(s), scans = tonumber(n), estimatedSales = tonumber(u) or 0,
         seconds = tonumber(e) or 0 }
 end
 
--- adds one scan of item `id` to its day; sales nil when this scan was not compared
-local function addDay(daily, id, day, price, stock, sales, seconds)
+-- at most 2 decimals, trailing zeros dropped
+local function num(x) return (string.format("%.2f", math.max(0, x)):gsub("%.?0+$", "")) end
+
+local function writeDay(daily, id, day, d)
     daily[id] = daily[id] or {}
-    local d = readDay(daily[id][day])
-    local p = math.min(d.price or math.huge, price or math.huge)
-    local units, secs = d.estimatedSales + (sales or 0), d.seconds + (sales and seconds or 0)
-    daily[id][day] = string.format("%s %d %d", p < math.huge and string.format("%d", p) or "-",
-            math.max(d.stock or 0, stock), (d.scans or 0) + 1)
-        .. (secs > 0 and string.format(" %d %d", units, secs) or "")
+    daily[id][day] = string.format("%s %d %d", d.price and string.format("%d", d.price) or "-", d.stock or 0,
+            d.scans or 0)
+        .. (d.seconds >= 0.005 and " " .. num(d.estimatedSales) .. " " .. num(d.seconds) or "")
+end
+
+-- adds one scan of item `id` to its day (price nil: sold out)
+local function addDay(daily, id, day, price, stock)
+    local d = readDay(daily[id] and daily[id][day])
+    if price and not (d.price and d.price <= price) then d.price = price end
+    d.stock, d.scans = math.max(d.stock or 0, stock), (d.scans or 0) + 1
+    writeDay(daily, id, day, d)
+end
+
+local function addSales(daily, id, day, units, seconds)
+    local d = readDay(daily[id] and daily[id][day])
+    d.estimatedSales, d.seconds = d.estimatedSales + units, d.seconds + seconds
+    writeDay(daily, id, day, d)
 end
 
 -- least time left of each band (1 Short, 2 Medium, 3 Long, 4 Very long), in seconds: retail's values, assumed on
@@ -109,6 +130,71 @@ local function pause()
     if co and not main then coroutine.yield() end
 end
 
+-- first and last Tranche (half hours from day0) Comparison `c` covers
+local function tranches(c, day0)
+    return math.floor((c.start - day0) / TRANCHE), math.floor((c.finish - 1 - day0) / TRANCHE)
+end
+
+-- Merge by Tranche of `comparisons` (the Tranches first..last only, when given), day0 the start of day 0:
+-- { [itemID] = { [tranche] = { units, seconds } } }. Each Comparison spreads an item's units over the Tranches it
+-- covers, prorata of its time in each; an author's Comparisons in a Tranche add up (they never overlap), and authors
+-- average out, units and seconds alike: players scanning at once see the same purchases. Items not compared ignored.
+-- Same rule on the server: tests/merge-cases.json.
+function M.Merge(comparisons, day0, first, last)
+    local byAuthor, done = {}, 0 -- [itemID][tranche][author] = { units, seconds }
+    for _, c in ipairs(comparisons) do
+        local from, to = tranches(c, day0)
+        for k = math.max(from, first or from), math.min(to, last or to) do
+            local at = day0 + k * TRANCHE
+            local share = math.min(c.finish, at + TRANCHE) - math.max(c.start, at)
+            for id, sold in c.items:gmatch("(%d+) (%S+) %d+ [^,]+") do
+                done = done + 1
+                if done % 200 == 0 then pause() end
+                sold, id = tonumber(sold), tonumber(id)
+                if sold then
+                    byAuthor[id] = byAuthor[id] or {}
+                    byAuthor[id][k] = byAuthor[id][k] or {}
+                    local a = byAuthor[id][k][c.author] or { 0, 0 }
+                    byAuthor[id][k][c.author] = a
+                    a[1], a[2] = a[1] + sold * share / (c.finish - c.start), a[2] + share
+                end
+            end
+        end
+    end
+    local merged = {}
+    for id, ks in pairs(byAuthor) do
+        merged[id] = {}
+        for k, authors in pairs(ks) do
+            local n, units, seconds = 0, 0, 0
+            for _, a in pairs(authors) do n, units, seconds = n + 1, units + a[1], seconds + a[2] end
+            merged[id][k] = { units / n, seconds / n }
+        end
+    end
+    return merged
+end
+
+-- Keeps Comparison `c` (once per author and start) and adds to the daily summary what it changes in the merge of
+-- the Tranches it covers, against the kept Comparisons of the same auction house.
+local function addComparison(db, c, day0)
+    local kept, near = db.comparisons or {}, {}
+    local first, last = tranches(c, day0)
+    for _, o in ipairs(kept) do
+        if o.author == c.author and o.start == c.start then return end
+        if o.realm == c.realm and o.faction == c.faction and o.finish > day0 + first * TRANCHE
+            and o.start < day0 + (last + 1) * TRANCHE then near[#near + 1] = o end
+    end
+    local before = M.Merge(near, day0, first, last)
+    near[#near + 1] = c
+    for id, ks in pairs(M.Merge(near, day0, first, last)) do
+        for k, v in pairs(ks) do
+            local b = before[id] and before[id][k] or { 0, 0 }
+            addSales(db.daily, id, math.floor(k * TRANCHE / 86400), v[1] - b[1], v[2] - b[2])
+        end
+    end
+    kept[#kept + 1] = c
+    db.comparisons = kept
+end
+
 local function byPrice(a, b)
     if a.price ~= b.price then return a.price < b.price end
     if a.size ~= b.size then return a.size < b.size end
@@ -116,13 +202,14 @@ local function byPrice(a, b)
 end
 
 -- Full scan: { [itemID] = { { price (unit, integer copper), size, count, timeLeft }, ... } } taken at time `now`
--- on the auction house of `realm` and `faction` (one per faction: scans to compare must share both).
--- Replaces the stored full scan and adds it to the daily summary (lowest price, highest stock of the day, and the
--- estimated sales since the stored scan when it is from the same auction house, at most MAX_GAP older). A scan
+-- by `author` on the auction house of `realm` and `faction` (one per faction: scans to compare must share both).
+-- Replaces the stored full scan and adds it to the daily summary (lowest price, highest stock of the day). Compared
+-- with the stored scan when it is from the same auction house, at most MAX_GAP older: a Comparison, kept and merged
+-- by Tranche into the estimated sales of the daily summary. A scan
 -- without any auction is ignored; one less than MIN_GAP newer, or holding the same data (/vim relire), is not
 -- compared and keeps the stored scan's time, so that the next comparison spans the real time.
-function M.Ingest(scan, now, realm, faction)
-    local db, day = VepIndustriesMarketDB, T.Today(now)
+function M.Ingest(scan, now, realm, faction, author)
+    local db, day, day0 = VepIndustriesMarketDB, T.Today(now), T.Day0()
     if not db or not day then return end
     local items, stocks, done = {}, {}, 0
     for id, tiers in pairs(scan) do
@@ -139,22 +226,40 @@ function M.Ingest(scan, now, realm, faction)
         end
     end
     if next(items) == nil then return end
-    local prev, daily = db.fullScan, db.daily or {}
+    db.daily = db.daily or {}
+    local prev, daily = db.fullScan, db.daily
     local gap = prev and prev.realm == realm and prev.faction == faction and now - prev.time
     if gap and (gap < MIN_GAP or sameItems(prev.items, items)) then now, gap = prev.time, nil end
     if gap and gap > MAX_GAP then gap = nil end
-    local before = gap and prev.items or {}
+    local before, entries = gap and prev.items or {}, {}
+    local function entry(id, sold, stock, price)
+        entries[#entries + 1] = string.format("%d %s %d %s", id, sold and string.format("%d", sold) or "-", stock,
+            price and string.format("%d", price) or "-")
+    end
     done = 0
     for id in pairs(items) do
         done = done + 1
         if done % 200 == 0 then pause() end
         local tiers = scan[id]
-        addDay(daily, id, day, tiers[1].price, stocks[id],
-            before[id] and estimatedSales(decode(before[id]), tiers, gap), gap)
+        addDay(daily, id, day, tiers[1].price, stocks[id])
+        if gap then entry(id, before[id] and estimatedSales(decode(before[id]), tiers, gap), stocks[id], tiers[1].price) end
     end
     for id, encoded in pairs(before) do -- sold out
-        if not items[id] then addDay(daily, id, day, nil, 0, estimatedSales(decode(encoded), {}, gap), gap) end
+        if not items[id] then
+            addDay(daily, id, day, nil, 0)
+            entry(id, estimatedSales(decode(encoded), {}, gap), 0, nil)
+        end
     end
+    if gap then
+        addComparison(db, { author = author, realm = realm, faction = faction, start = prev.time, finish = now,
+            items = table.concat(entries, ",") }, day0)
+    end
+    local kept = {}
+    for _, c in ipairs(db.comparisons or {}) do
+        if c.finish > now - KEEP_COMPARISONS then kept[#kept + 1] = c end
+    end
+    while #kept > M.MAX_COMPARISONS do table.remove(kept, 1) end
+    db.comparisons = kept
     for id, days in pairs(daily) do
         for d in pairs(days) do
             if d <= day - KEEP_DAYS then days[d] = nil end
@@ -162,10 +267,10 @@ function M.Ingest(scan, now, realm, faction)
         if next(days) == nil then daily[id] = nil end
     end
     db.fullScan = { time = now, realm = realm, faction = faction, items = items }
-    db.daily = daily
 end
 
--- { time, realm, faction, items, bytes } of the stored full scan (bytes: rough size on disk, daily summary included), nil without one
+-- { time, realm, faction, items, bytes } of the stored full scan (bytes: rough size on disk, daily summary and
+-- Comparisons included), nil without one
 function M.Status()
     local fs = VepIndustriesMarketDB and VepIndustriesMarketDB.fullScan
     if not fs then return nil end
@@ -175,6 +280,7 @@ function M.Status()
         bytes = bytes + 16
         for _, v in pairs(days) do bytes = bytes + #v + 14 end
     end
+    for _, c in ipairs(VepIndustriesMarketDB.comparisons or {}) do bytes = bytes + #c.items + 120 end
     return { time = fs.time, realm = fs.realm, faction = fs.faction, items = items, bytes = bytes }
 end
 

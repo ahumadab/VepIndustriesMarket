@@ -1,0 +1,60 @@
+{
+  "rule": "Merge of Comparisons by Tranche, shared by the addon (Market.Merge, tests/test.lua) and the server. Times in seconds from the start of day 0 (Tranche k covers [k * 1800, (k + 1) * 1800[, day floor(k / 48)). A Comparison's items: 'itemID sold stock price' joined by ',', sold '-' for an item not compared (new in the second scan), price '-' for an item sold out. Each Comparison spreads an item's units over the Tranches it covers, prorata of its time in each; an author's Comparisons in a Tranche add up (they never overlap); authors average out, units and seconds alike. Expected: tranches[itemID][tranche] = [units, seconds], to 1e-6.",
+  "cases": [
+    {
+      "name": "joueur seul : deux Comparaisons dans la même Tranche s'additionnent",
+      "comparisons": [
+        { "author": "A", "start": 0, "finish": 600, "items": "900 2 10 100" },
+        { "author": "A", "start": 600, "finish": 1500, "items": "900 3 7 100" }
+      ],
+      "tranches": { "900": { "0": [5, 1500] } }
+    },
+    {
+      "name": "Comparaison à cheval sur deux Tranches : ventes au prorata du temps",
+      "comparisons": [{ "author": "A", "start": 1500, "finish": 2400, "items": "900 9 5 100" }],
+      "tranches": { "900": { "0": [3, 300], "1": [6, 600] } }
+    },
+    {
+      "name": "Comparaison à cheval sur minuit : moitié sur chaque jour",
+      "comparisons": [{ "author": "A", "start": 85500, "finish": 87300, "items": "900 6 5 100" }],
+      "tranches": { "900": { "47": [3, 900], "48": [3, 900] } }
+    },
+    {
+      "name": "deux joueurs sur la même Tranche : moyenne, pas somme",
+      "comparisons": [
+        { "author": "A", "start": 0, "finish": 1800, "items": "900 10 5 100" },
+        { "author": "B", "start": 0, "finish": 1800, "items": "900 6 5 100" }
+      ],
+      "tranches": { "900": { "0": [8, 1800] } }
+    },
+    {
+      "name": "deux joueurs, l'un sur une partie de la Tranche : moyenne des ventes et des durées",
+      "comparisons": [
+        { "author": "A", "start": 0, "finish": 1800, "items": "900 10 5 100" },
+        { "author": "B", "start": 900, "finish": 1800, "items": "900 4 5 100" }
+      ],
+      "tranches": { "900": { "0": [7, 1350] } }
+    },
+    {
+      "name": "deux joueurs à cheval sur deux Tranches, décalés",
+      "comparisons": [
+        { "author": "A", "start": 900, "finish": 2700, "items": "900 12 5 100" },
+        { "author": "B", "start": 1800, "finish": 3600, "items": "900 4 5 100" }
+      ],
+      "tranches": { "900": { "0": [6, 900], "1": [5, 1350] } }
+    },
+    {
+      "name": "objet comparé par un seul des deux joueurs : le sien seul",
+      "comparisons": [
+        { "author": "A", "start": 0, "finish": 1800, "items": "900 10 5 100,901 4 3 50" },
+        { "author": "B", "start": 0, "finish": 1800, "items": "900 6 5 100" }
+      ],
+      "tranches": { "900": { "0": [8, 1800] }, "901": { "0": [4, 1800] } }
+    },
+    {
+      "name": "objet nouveau ignoré, objet épuisé compté",
+      "comparisons": [{ "author": "A", "start": 0, "finish": 1800, "items": "900 - 5 100,901 3 0 -" }],
+      "tranches": { "901": { "0": [3, 1800] } }
+    }
+  ]
+}

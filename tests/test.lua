@@ -131,7 +131,7 @@ M.Ingest({
   [919] = { tier(100, 1, 2, 3), tier(120, 1, 3, 3) }, -- dearer tier cancelled
   [920] = { tier(100, 1, 2, 3), tier(110, 1, 3, 3) }, -- cheapest tier bought out
   [921] = { tier(1, 1038, 1, 3), tier(1, 200, 2, 3) }, -- commodity: a partial buy shrinks the lot
-}, t0, "PvE", "Horde")
+}, t0, "PvE", "Horde", "Boris")
 M.Ingest({
   [910] = { tier(100, 1, 1, 3) },
   [912] = { tier(100, 1, 1, 3), tier(90, 1, 4, 4) },
@@ -141,7 +141,12 @@ M.Ingest({
   [919] = { tier(100, 1, 1, 3) },
   [920] = { tier(110, 1, 1, 3) },
   [921] = { tier(1, 838, 1, 3), tier(1, 200, 2, 3) },
-}, t0 + 3600, "PvE", "Horde")
+}, t0 + 3600, "PvE", "Horde", "Boris")
+local c = VepIndustriesMarketDB.comparisons and VepIndustriesMarketDB.comparisons[1] or {}
+local function has(entry) return ("," .. (c.items or "") .. ","):find("," .. entry .. ",", 1, true) end
+ok(#VepIndustriesMarketDB.comparisons == 1 and c.author == "Boris" and c.start == t0 and c.finish == t0 + 3600
+  and c.realm == "PvE" and c.faction == "Horde" and has("910 2 1 100") and has("913 10 0 -") and has("915 - 9 10")
+  and has("911 0 0 -"), "Comparaison enregistree : auteur, hotel des ventes, debut, fin, vendues stock prix par objet")
 local function rate(id) return M.Report(id).estimatedSalesPerDay end
 ok(near(rate(910), 2 * 24), "palier partiellement vendu : 4 disparues dont 2 Short -> 2 vendues en 1 h")
 ok(rate(911) == 0, "encheres Short disparues : expirees, pas vendues")
@@ -156,29 +161,48 @@ ok(near(rate(920), 4 * 24), "acheteurs du moins cher : palier vide + baisse au n
 ok(near(rate(921), 200 * 24), "marchandise : unites comptees par prix, quelle que soit la taille du lot")
 ok(M.Report(910).confidence == "low", "1 jour de comparaison (jour ancien sans ventes ignore) -> non fiable")
 local t2 = time() - 3600 -- today 00:00
-M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 2, 2) } }, t2, "PvE", "Horde")
+M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 2, 2) } }, t2, "PvE", "Horde", "Boris")
 ok(near(rate(910), 48) and rate(917) == nil, "plus de 2 h d'ecart : pas compare")
 local t3 = t2 + 1200
-M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3, "PvE", "Horde")
+M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3, "PvE", "Horde", "Boris")
 ok(near(rate(917), 72), "enchere Medium disparue en 20 min : vendue")
 ok(near(rate(910), 36) and M.Report(910).confidence == "high", "2 jours, 3 scans compares : 2 vendues en 80 min, fiable")
-M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3 + 1800, "PvE", "Horde")
+M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3 + 1800, "PvE", "Horde", "Boris")
 ok(near(rate(910), 36) and M.Status().time == t3, "meme scan relu : pas compare, garde son heure")
-M.Ingest({}, t3 + 2000, "PvE", "Horde")
+M.Ingest({}, t3 + 2000, "PvE", "Horde", "Boris")
 ok(M.Status().items == 2, "scan vide ignore")
-M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, t3 + 60, "PvE", "Horde")
+M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, t3 + 60, "PvE", "Horde", "Boris")
 ok(near(rate(910), 36) and M.Status().time == t3, "scans tres rapproches : pas compares")
-M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, t3 + 3600, "PvE", "Horde")
-M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, t3 + 4000, "PvE", "Alliance")
+M.Ingest({ [910] = { tier(100, 1, 1, 3) } }, t3 + 3600, "PvE", "Horde", "Boris")
+M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, t3 + 4000, "PvE", "Alliance", "Boris")
 ok(near(rate(910), 36), "autre faction : pas comparee")
 ok(rate(999999) == nil and M.Report(999999).confidence == nil, "objet sans scan complet : pas de ventes, sans erreur")
+
+-- a Comparison over midnight: its sales split between both days, prorata of the time on each
+VepIndustriesMarketDB = {}
+M.Ingest({ [940] = { tier(100, 1, 5, 3) } }, t2 - 900, "PvE", "Horde", "Boris")
+M.Ingest({ [940] = { tier(100, 1, 3, 3) } }, t2 + 600, "PvE", "Horde", "Boris")
+local eve, morn = M.Report(940).daily[TODAY - 1], M.Report(940).daily[TODAY]
+ok(near(eve.estimatedSales, 1.2) and eve.seconds == 900 and near(morn.estimatedSales, 0.8) and morn.seconds == 600
+  and eve.scans == 1 and morn.scans == 1, "Comparaison a cheval sur minuit : ventes au prorata de chaque jour")
+
+-- Comparisons kept a day at most, and at most M.MAX_COMPARISONS (size of the save)
+VepIndustriesMarketDB = {}
+for i = 0, M.MAX_COMPARISONS + 2 do
+  M.Ingest({ [941] = { tier(100, 1, 50 - i % 2, 3) } }, t2 + i * 900, "PvE", "Horde", "Boris")
+end
+local kept = VepIndustriesMarketDB.comparisons
+ok(#kept == M.MAX_COMPARISONS and kept[1].start == t2 + 2 * 900, "Comparaisons limitees en nombre, les plus anciennes retirees")
+ok(near(rate(941), 86400 / 1800), "Comparaisons retirees : resume journalier intact")
+M.Ingest({ [941] = { tier(100, 1, 51, 3) } }, t2 + 86400 + (M.MAX_COMPARISONS + 2) * 900, "PvE", "Horde", "Boris")
+ok(#VepIndustriesMarketDB.comparisons == 0, "Comparaisons de plus de 24 h retirees")
 
 -- verdict from reliable estimated sales: days the current stock lasts at that pace (provisional thresholds, #7)
 VepIndustriesMarketDB = {}
 ok(M.Report(14048).verdict == "saturated" and M.Report(14048).source == "trend", "14048 sature par la tendance")
 local function twoDays(before, after) -- one comparison of 1 h yesterday, one today: reliable
-  M.Ingest(before, t0, "PvE", "Horde"); M.Ingest(after, t0 + 3600, "PvE", "Horde")
-  M.Ingest(before, t2, "PvE", "Horde"); M.Ingest(after, t2 + 3600, "PvE", "Horde")
+  M.Ingest(before, t0, "PvE", "Horde", "Boris"); M.Ingest(after, t0 + 3600, "PvE", "Horde", "Boris")
+  M.Ingest(before, t2, "PvE", "Horde", "Boris"); M.Ingest(after, t2 + 3600, "PvE", "Horde", "Boris")
 end
 twoDays({ [14048] = { tier(100, 1, 30, 3) }, [930] = { tier(100, 1, 101, 3) }, [931] = { tier(100, 1, 50, 3) },
     [932] = { tier(100, 1, 2, 3) } },
@@ -207,8 +231,8 @@ end
 -- -> units sold over all items, items with sales, units of the given items
 local function realPair(before, after, t1, t2, ids)
   VepIndustriesMarketDB = {}
-  M.Ingest(rowsToScan(before), t1, "PvE", "Horde")
-  M.Ingest(rowsToScan(after), t2, "PvE", "Horde")
+  M.Ingest(rowsToScan(before), t1, "PvE", "Horde", "Boris")
+  M.Ingest(rowsToScan(after), t2, "PvE", "Horde", "Boris")
   local function units(id) return math.floor((rate(id) or 0) * (t2 - t1) / 86400 + 0.5) end
   local total, selling, of = 0, 0, {}
   for id in pairs(rowsToScan(before)) do total, selling = total + units(id), selling + (units(id) > 0 and 1 or 0) end
@@ -225,6 +249,42 @@ ok(total == 7165 and selling == 147 and of[1] == 0 and of[2] == 368 and of[3] ==
 total, selling, of = realPair(FULLSCAN_1121_2023, FULLSCAN_1121_2039, FULLSCAN_1121_2023_TIME, FULLSCAN_1121_2039_TIME, { 2512, 4306 })
 ok(total == 4227 and selling == 110 and of[1] == 0 and of[2] == 1315,
   string.format("scans reels consecutifs, 919 s : %d unites vendues sur %d objets", total, selling))
+
+-- merge by Tranche: the cases shared with the server (tests/merge-cases.json, read by tests/run.cjs)
+local function sameTranches(got, want)
+  for id, ks in pairs(want) do
+    for k, v in pairs(ks) do
+      local g = got[id] and got[id][k]
+      if not (g and math.abs(g[1] - v[1]) < 1e-6 and math.abs(g[2] - v[2]) < 1e-6) then return false end
+    end
+  end
+  for id, ks in pairs(got) do
+    for k in pairs(ks) do if not (want[id] and want[id][k]) then return false end end
+  end
+  return true
+end
+for _, case in ipairs(MERGE_CASES.cases) do ok(sameTranches(M.Merge(case.comparisons, 0), case.tranches), "fusion : " .. case.name) end
+
+-- merge of the real Comparisons: alone, the scans' units; the same one by a second player, no more; a second
+-- player 10 min later, between both
+local function sold(tranches)
+  local units = 0
+  for _, ks in pairs(tranches) do for _, v in pairs(ks) do units = units + v[1] end end
+  return math.floor(units + 0.5)
+end
+local real = VepIndustriesMarketDB.comparisons[1] -- 2023 -> 2039, 919 s, 4227 units
+local twin = { author = "Ami", start = real.start, finish = real.finish, items = real.items }
+local later = { author = "Ami", start = real.start + 600, finish = real.finish + 600, items = real.items }
+ok(sold(M.Merge({ real }, DAY0)) == 4227 and sold(M.Merge({ real, twin }, DAY0)) == 4227
+  and sameTranches(M.Merge({ real, twin }, DAY0), M.Merge({ real }, DAY0)),
+  "fusion des scans reels : seul, 4227 unites ; meme Comparaison chez un ami, pas comptee deux fois")
+local shifted = sold(M.Merge({ real, later }, DAY0))
+ok(shifted > 4227 and shifted < 2 * 4227, "fusion des scans reels : ami decale de 10 min, moyenne sur la Tranche commune ("
+  .. shifted .. ")")
+-- size of a real Comparison, extrapolated to the whole scan: the most kept must fit the save
+local kb = #real.items * FULLSCAN_TOTAL_ITEMS / FULLSCAN_ITEMS / 1000
+ok(kb * M.MAX_COMPARISONS < 4000, string.format("Comparaison reelle : %d Ko extrapoles, %d Ko pour %d", math.floor(kb),
+  math.floor(kb * M.MAX_COMPARISONS), M.MAX_COMPARISONS))
 
 -- real data: same verdicts as before the Market module
 local count, n = {}, 0
@@ -262,6 +322,7 @@ C_AuctionHouse = stub("C_AuctionHouse")
 GetCoinTextureString = function(c) return tostring(c) .. "c" end
 GetRealmName = function() return "PvE" end
 UnitFactionGroup = function() return "Horde" end
+UnitName = function() return "Boris" end
 hooksecurefunc = function() end
 local frames, textures = {}, {}
 -- texture double recording its color, height and visibility, to count the bars drawn
@@ -310,14 +371,14 @@ ok(okTip and lines[1] == "|cffffd100Tendance 7 j|r || |cffff5959Saturé|r  prix 
 local okNone = pcall(postCall, tip, { id = 999999 })
 ok(okNone and #lines == 1, "pas de ligne infobulle pour un objet absent")
 -- 933: no Auctionator history, sells 1 of 5 then 1 of 4
-M.Ingest({ [4338] = { tier(100, 1, 9, 3) }, [933] = { tier(100, 1, 5, 3) } }, t0, "PvE", "Horde")
-M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [933] = { tier(100, 1, 4, 3) } }, t0 + 3600, "PvE", "Horde")
+M.Ingest({ [4338] = { tier(100, 1, 9, 3) }, [933] = { tier(100, 1, 5, 3) } }, t0, "PvE", "Horde", "Boris")
+M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [933] = { tier(100, 1, 4, 3) } }, t0 + 3600, "PvE", "Horde", "Boris")
 postCall(tip, { id = 4338 })
 ok(lines[2]:find("|cff9d9d9d≈ 72/jour|r", 1, true), "infobulle : ventes estimees grisees sous le seuil " .. lines[2])
 M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [933] = { tier(100, 1, 4, 3) }, [997] = { tier(1, 1, 1, 3) } }, t2,
-  "PvE", "Horde")
+  "PvE", "Horde", "Boris")
 M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [933] = { tier(100, 1, 3, 3) }, [998] = { tier(1, 1, 1, 3) } }, t3,
-  "PvE", "Horde")
+  "PvE", "Horde", "Boris")
 postCall(tip, { id = 4338 })
 ok(lines[3]:find("|cffffffff≈ 54/jour|r", 1, true), "infobulle : ventes estimees fiables " .. lines[3])
 -- label colour: TITLE in src/UI.lua
@@ -326,7 +387,7 @@ ok(lines[2]:find("^|cffffd100Tendance 7 j|r") and lines[3]:find("^|cffffd100Vent
 postCall(tip, { id = 933 })
 ok(lines[4] and lines[4]:find("^|cffffd100Ventes estimées 7 j|r || |cff4cff4cDemande|r |cff9d9d9d%(2 j%)|r"),
   "infobulle : verdict des ventes sans historique Auctionator, sans tendance " .. tostring(lines[4]))
-VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily = nil, nil
+VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily, VepIndustriesMarketDB.comparisons = nil, nil, nil
 local slow = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 2.5 })
 ok(slow:find("≈ 2,5/jour", 1, true), "infobulle : decimale sous 10/jour " .. slow)
 local okWin, e3 = pcall(function()
@@ -353,8 +414,8 @@ local function salesBars(id)
 end
 local function dayAt(day, s) return DAY0 + day * 86400 + s end
 local function pair(day, a, b, gap)
-  M.Ingest(rowsToScan(a), dayAt(day, 72000), "PvE", "Horde")
-  M.Ingest(rowsToScan(b), dayAt(day, 72000 + gap), "PvE", "Horde")
+  M.Ingest(rowsToScan(a), dayAt(day, 72000), "PvE", "Horde", "Boris")
+  M.Ingest(rowsToScan(b), dayAt(day, 72000 + gap), "PvE", "Horde", "Boris")
 end
 VepIndustriesMarketDB = {}
 local okBars, e6 = pcall(function()
@@ -393,7 +454,7 @@ ok(older:find("Ventes estimées", 1, true) and not older:find("Stock", 1, true),
   "survol sans historique Auctionator : ventes estimees seules\n" .. older)
 ok(oldest:find("pas fiable", 1, true), "survol d'un jour hors fenetre : ventes estimees non fiables\n" .. oldest)
 ok(empty:find("Aucune donnée", 1, true), "survol d'un jour sans donnees\n" .. empty)
-VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily = nil, nil
+VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily, VepIndustriesMarketDB.comparisons = nil, nil, nil
 
 -- Auctionator adapter, with API doubles
 fire("ADDON_LOADED", "VepIndustriesMarket")

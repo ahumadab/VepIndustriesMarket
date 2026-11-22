@@ -41,7 +41,7 @@ function read(file) {
   const daily = {};
   for (const [, id, days] of sv.slice(sv.indexOf('["daily"] = {')).matchAll(/\[(\d+)\] = \{\n([^}]*)\}/g)) {
     daily[id] = {};
-    for (const [, day, sold, seconds] of days.matchAll(/\[(\d+)\] = "\S+ \d+ \d+(?: (\d+) (\d+))?"/g)) {
+    for (const [, day, sold, seconds] of days.matchAll(/\[(\d+)\] = "\S+ \d+ \d+(?: ([\d.]+) ([\d.]+))?"/g)) {
       daily[id][day] = { sold: Number(sold || 0), seconds: Number(seconds || 0) };
     }
   }
@@ -87,7 +87,7 @@ if (mode === 'fixture') {
   const rows = [];
   let compared = 0;
   for (const [id, days] of Object.entries(current.daily)) {
-    const sold = sum(days, 'sold') - sum(previous.daily[id], 'sold');
+    const sold = Math.round(sum(days, 'sold') - sum(previous.daily[id], 'sold'));
     const seconds = sum(days, 'seconds') - sum(previous.daily[id], 'seconds');
     if (seconds > 0) compared++;
     if (sold > 0) rows.push({ id, sold, perDay: Math.round(sold * 86400 / seconds), before: previous.items[id], after: current.items[id] });
