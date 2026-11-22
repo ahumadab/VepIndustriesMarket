@@ -48,8 +48,10 @@ Auctionator = {
     Get = function(name) return AUCTIONATOR_CONFIG[name] end },
 }
 
-dofile("../src/Trend.lua")
-dofile("../src/Market.lua")
+-- a file of src/ run as the game runs it: `...` is the addon's name
+local function loadAddonFile(file) return assert(loadfile("../src/" .. file))("VepIndustriesMarket") end
+loadAddonFile("Trend.lua")
+loadAddonFile("Market.lua")
 local M = VepIndustriesMarket.Market
 
 -- fabricated histories: { {day, price, stock}, ... } in Auctionator's shape, under a fake itemID
@@ -480,10 +482,10 @@ local function fire(event, ...)
   end
 end
 local okLoad, err = pcall(function()
-  dofile("../src/Libs/ChatThrottleLib.lua")
-  local chunk = loadfile("../src/Capture.lua"); chunk("VepIndustriesMarket")
-  loadfile("../src/Exchange.lua")("VepIndustriesMarket")
-  dofile("../src/UI.lua")
+  loadAddonFile("Libs/ChatThrottleLib.lua")
+  loadAddonFile("Capture.lua")
+  loadAddonFile("Exchange.lua")
+  loadAddonFile("UI.lua")
 end)
 ok(okLoad, "chargement ChatThrottleLib + Capture.lua + Exchange.lua + UI.lua " .. tostring(err))
 ok(postCall ~= nil, "hook infobulle enregistre")
@@ -768,6 +770,11 @@ ok(fresh and fresh:find("0.2.1", 1, true) and fresh:find("0.2.0", 1, true) and f
 ok(not news("0.2.1") and not news("0.2.0") and not news("0.1.9") and not news("0.3.0-dev+abc") and not news("x"),
   "echange : meme version deja signalee, plus ancienne, identique ou de developpement -> rien")
 ok(news("0.10.0"), "echange : versions comparees nombre par nombre (0.10.0 apres 0.2.1)")
+-- the announce of a later version, with fields this one does not know: still understood
+chat.outbox = {}
+heard("A 0 " .. theirs.finish .. " 0.11.0 champ futur", "GUILD", "Futur Nom"); play(1)
+ok(payload(to("Futur-Nom", "W")) == "1 0\n" .. MINE and lastSaid():find("0.11.0", 1, true),
+  "echange : annonce d'une version future avec un champ inconnu -> inventaire chuchote, version signalee")
 
 -- the friend's inventory lacks ours and lists one of theirs: ours goes, cut into messages, then our inventory
 chat.outbox = {}

@@ -11,7 +11,8 @@ Issues and specs for this repo live as GitHub issues on `ahumadab/VepIndustriesM
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
-- **A pull request closes its ticket**: its body says `Closes #<n>`. `develop` is the default branch, so GitHub closes the ticket when the PR merges into it.
+- **A pull request closes its ticket**: its body says `Closes #<n>`. `develop` is the default branch, so GitHub closes the ticket when the PR merges into it. `.github/workflows/pr-title.yml` refuses a PR from `feature/<n>-…` without it.
+- **A criterion no merge can meet** (it waits on a release, a friend in game) gets its own ticket, `ready-for-human`, a sub-issue of the spec, as soon as it shows (when the spec is split, at the latest during review): the PR still closes its ticket, and the spec stays open until that one closes.
 - **A spec closes itself** once its last ticket closes (`.github/workflows/close-finished-specs.yml`): a spec still open after that points to a failed run of the workflow.
 - **A ticket waiting on data** (days of real scans, a measurement in game) names it under `## Blocked by`, with the earliest date it can be met.
 - **A PR meets another ticket's criterion**: comment on that ticket, naming the PR and the criterion, so whoever picks it up skips that work.

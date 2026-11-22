@@ -2,7 +2,8 @@
 -- - Announce, on GUILD, at login, after each of our Comparisons, and once a row of received ones has settled:
 --   "A <generated> <finish> <version>", the time of our data file (0 without one), the end of our latest Comparison and
 --   our addon's version. NORMAL priority: it gets through a transfer of ours in BULK. Who hears a newer release than
---   theirs is told in the chat, once (the zip goes from hand to hand, no addon manager updates it).
+--   theirs is told in the chat, once (the zip goes from hand to hand, no addon manager updates it). Versions differ
+--   in a guild: a field is only ever added at the end, and a reader ignores those after the ones it knows.
 -- - Who hears it and may give or take whispers back its inventory, payload "W": "<ask> <generated>", then a line per
 --   Comparison it knows that ends after its data file ("author start", see Market.Id), and one per Comparison it got
 --   part of from that player ("author start chunks").
@@ -269,7 +270,8 @@ f:SetScript("OnEvent", function(_, event, prefix, text, channel, sender)
     local from = whisperName(sender)
     if from == me() and channel ~= "WHISPER" then return end -- our own announce, back from GUILD
     if channel == "WHISPER" then return chunk(from, text) end
-    local gen, finish, version = text:match("^A (%d+) (%d+) ?(%S*)$")
+    -- fields after ours ignored: a later version may add some (see the protocol)
+    local gen, finish, version = text:match("^A (%d+) (%d+) ?(%S*)")
     if channel == "GUILD" and gen then tellIfNewer(version) end
     if channel == "GUILD" and gen and (tonumber(finish) > generated() or latest() > tonumber(gen)) then
         send(from, "W", "", inventory(from, 1))

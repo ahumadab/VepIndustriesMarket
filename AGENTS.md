@@ -24,7 +24,7 @@ Gitflow : `main` (versions taguées), `develop` (intégration, par défaut), `fe
 
 ### Issue tracker
 
-Les tickets vivent dans les GitHub Issues de `ahumadab/VepIndustriesMarket` (CLI `gh`). Lire un ticket : `gh issue view <n> --json title,body,labels,comments`. See `docs/agents/issue-tracker.md`.
+Les tickets vivent dans les GitHub Issues de `ahumadab/VepIndustriesMarket` (CLI `gh`). Lire un ticket : `gh issue view <n> --json title,body,labels,comments`. Avant de créer, fermer ou citer un ticket, ou d'écrire le corps d'une PR : `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
