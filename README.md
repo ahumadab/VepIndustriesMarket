@@ -22,7 +22,7 @@ Les tests ne prouvent pas le rendu en jeu : vérifier avec `/reload` après chaq
 ## Structure
 
 - `src/` : l'addon tel qu'il est copié dans le jeu (`@version@` remplacé dans le `.toc`)
-- `tests/` : `test.lua`, `merge-cases.json` (cas de la fusion par Tranche, partagés avec le serveur), `fixtures/realdata.lua` (historique Auctionator réel exporté), `fixtures/fullscan.lua` (un objet sur dix du Scan complet réel du 21/11), `fixtures/fullscan-<MMJJ>-<HHMM>.lua` (les mêmes objets dans des Scans complets plus récents, nommés par leur date et heure, extraits des SavedVariables et de leur `.bak` par `npm run fixture`)
+- `tests/` : `test.lua`, `merge-cases.json` (cas de la fusion par Tranche, partagés avec le serveur ; `npm run merge-case` réécrit le cas réel après un changement de la règle), `fixtures/realdata.lua` (historique Auctionator réel exporté), `fixtures/fullscan.lua` (un objet sur dix du Scan complet réel du 21/11), `fixtures/fullscan-<MMJJ>-<HHMM>.lua` (les mêmes objets dans des Scans complets plus récents, nommés par leur date et heure, extraits des SavedVariables et de leur `.bak` par `npm run fixture`)
 - `scripts/saved.mjs` : `npm run fixture`, et `npm run report` (ce que l'addon a enregistré depuis la sauvegarde précédente)
 - `scripts/build.mjs` : deploy / release
 

@@ -1,5 +1,7 @@
 -- Run: npm test. Fengari + WoW API doubles: checks logic and that UI code runs without nil errors.
 -- Does NOT prove in-game rendering.
+-- One script, run in order: each M.Ingest is compared with the full scan stored by the previous one. A new scan goes
+-- in a block of its own, opened with VepIndustriesMarketDB = {}, so the blocks after it keep their chain of scans.
 local fails = 0
 local out = print -- print itself is replaced below to read the addon's chat messages
 local function ok(cond, name) if not cond then fails = fails + 1; out("FAIL " .. name) else out("ok   " .. name) end end
@@ -285,6 +287,23 @@ local first = 1800 - (real.start - DAY0) % 1800
 local expect = 4227 * (first / 919 + ((919 - first) / 919 + 1) / 2)
 ok(sold(M.Merge({ real, later }, DAY0)) == math.floor(expect + 0.5),
   string.format("fusion des scans reels : ami decale de 10 min, moyenne sur la Tranche commune (%.1f)", expect))
+-- the same pair as JSON, times from day 0: npm run merge-case writes it as the real case of tests/merge-cases.json
+do
+  local a = { author = "A", start = real.start - DAY0, finish = real.finish - DAY0, items = real.items }
+  local b = { author = "B", start = a.start + 600, finish = a.finish + 600, items = real.items }
+  local items = {}
+  for id, ks in pairs(M.Merge({ a, b }, 0)) do
+    local t = {}
+    for k, v in pairs(ks) do t[#t + 1] = string.format('"%d": [%.17g, %.17g]', k, v[1], v[2]) end
+    items[#items + 1] = string.format('"%d": { %s }', id, table.concat(t, ", "))
+  end
+  local function json(c)
+    return string.format('{ "author": "%s", "start": %d, "finish": %d, "items": "%s" }', c.author, c.start, c.finish,
+      c.items)
+  end
+  REAL_MERGE_CASE = string.format('{ "comparisons": [%s, %s], "tranches": { %s } }', json(a), json(b),
+    table.concat(items, ", "))
+end
 -- size of a real Comparison, extrapolated to the whole scan: the most kept must fit the save
 local kb = #real.items * FULLSCAN_TOTAL_ITEMS / FULLSCAN_ITEMS / 1000
 ok(kb * M.MAX_COMPARISONS < 4000, string.format("Comparaison reelle : %d Ko extrapoles, %d Ko pour %d", math.floor(kb),

@@ -7,6 +7,7 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "test": "node tests/run.cjs",
+    "merge-case": "node tests/run.cjs merge-case",
     "deploy": "node scripts/build.mjs deploy",
     "release": "node scripts/build.mjs release",
     "fixture": "node scripts/saved.mjs fixture",
