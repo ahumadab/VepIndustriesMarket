@@ -135,6 +135,24 @@ async function main() {
   assert.match(readFileSync(join(state, 'sync.log'), 'utf8'), /illisibles/);
   assert.equal(readFileSync(join(state, 'sent.txt'), 'utf8').trim().split('\n').length, first.length + 1);
 
+  // npm run fixture: the Comparisons block of a real save, verbatim, in place of the one written above
+  const fixture = join(__dirname, 'fixtures', 'comparisons.lua');
+  if (existsSync(fixture)) {
+    step('Comparaisons d\'une vraie sauvegarde (fixtures/comparisons.lua) : toutes envoyées, champs lus');
+    const block = readFileSync(fixture, 'utf8').trimEnd();
+    writeFileSync(saved, save(first).replace(/\["comparisons"\] = \{[\s\S]*?\n\},\n(?=\["errors"\])/, `${block}\n`));
+    const t = statSync(data).mtimeMs / 1000 + 2;
+    utimesSync(saved, t, t);
+    rmSync(join(state, 'sent.txt'));
+    assert.ok((await sync()).ok);
+    const sent = posted().flat();
+    assert.equal(sent.length, block.split('["start"]').length - 1);
+    for (const c of sent) {
+      assert.ok(c.author && ['Alliance', 'Horde', 'Neutral'].includes(c.faction) && c.finish > c.start, JSON.stringify(c));
+      assert.match(c.items, /^(\d+ (\d+|-) \d+ (\d+|-)(,\d+ (\d+|-) \d+ (\d+|-))*)?$/);
+    }
+  }
+
   step('30 jours sans nouvelle sauvegarde : tâche retirée');
   const old = Date.now() / 1000 - 31 * 86400;
   writeSave(first);

@@ -13,8 +13,10 @@ git switch develop && git pull
 git switch -c feature/12-ventes-estimees
 # ... commits ...
 npm run deploy                       # test en jeu depuis n'importe quelle branche
-gh pr create --base develop --fill   # corps : Closes #12
+gh pr create --base develop --title "feat(market): add estimated sales" --body-file pr.md   # corps : Closes #12
 ```
+
+Sujets de commit et titres de PR : `type(scope): sujet` en anglais, 72 caractères au plus. GitHub fusionne une PR de plusieurs commits sous son titre, qui devient donc le sujet du commit sur `develop`. `scripts/commit-subject.mjs` le vérifie, au commit par le hook `.githooks/commit-msg` et sur la PR par `.github/workflows/pr-title.yml`.
 
 `npm run release` refuse de tourner hors de `main` ou avec un arbre git sale.
 
