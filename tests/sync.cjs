@@ -26,15 +26,16 @@ mkdirSync(addon, { recursive: true });
 mkdirSync(savedDir, { recursive: true });
 copyFileSync(join(__dirname, '..', 'src', 'Sync.ps1'), join(addon, 'Sync.ps1'));
 
-// The save, laid out as the game writes it, with the real Comparison's items under several authors and starts.
+// The save, laid out as the game writes it, with the real Comparison's items under several authors and starts; with
+// CRLF, each entry also closes on a `-- [n]` comment, as some clients write them.
 const real = JSON.parse(readFileSync(join(__dirname, 'merge-cases.json'), 'utf8')).cases.at(-1).comparisons[0].items;
 const comparison = (author, start) => ({ author, realm: '', faction: 'Horde', start, finish: start + 919, items: real });
 const save = (comparisons, eol = '\n') => [
   '', 'VepIndustriesMarketDB = {', '["daily"] = {', '[15347] = {', '[2516] = "1100 22 10 0 7970",', '},', '},',
   '["author"] = "Vép",', '["comparisons"] = {',
-  ...comparisons.flatMap((c) => ['{', `["start"] = ${c.start},`, `["faction"] = "${c.faction}",`,
+  ...comparisons.flatMap((c, i) => ['{', `["start"] = ${c.start},`, `["faction"] = "${c.faction}",`,
     `["items"] = "${c.items}",`, `["realm"] = "${c.realm}",`, `["author"] = "${c.author}",`,
-    `["finish"] = ${c.finish},`, '},']),
+    `["finish"] = ${c.finish},`, eol === '\n' ? '},' : `}, -- [${i + 1}]`]),
   '},', '["errors"] = {', '},', '["fullScan"] = {', '["items"] = {', '[15347] = "2uk 3*5 4*2",', '},',
   '["realm"] = "",', '["time"] = 1795347859,', '["faction"] = "Horde",', '},', '}', '',
 ].join(eol);
@@ -128,6 +129,12 @@ async function main() {
   assert.deepEqual(posted(), [[added]]);
   assert.ok(statSync(data).mtimeMs > before);
 
+  step('Comparaisons illisibles (table imbriquée) : erreur notée, Comparaisons envoyées gardées');
+  writeSave([{ ...added, faction: 'Horde",\n["nested"] = {\n[1] = 2,\n},\n["more"] = "' }]);
+  assert.equal((await sync()).ok, false);
+  assert.match(readFileSync(join(state, 'sync.log'), 'utf8'), /illisibles/);
+  assert.equal(readFileSync(join(state, 'sent.txt'), 'utf8').trim().split('\n').length, first.length + 1);
+
   step('30 jours sans nouvelle sauvegarde : tâche retirée');
   const old = Date.now() / 1000 - 31 * 86400;
   writeSave(first);
@@ -139,7 +146,7 @@ async function main() {
   assert.ok((await install()).ok);
   rmSync(addon, { recursive: true });
   await ps(`Start-ScheduledTask -TaskName ${TASK}`);
-  for (let i = 0; i < 40 && await task(); i++) await new Promise((r) => setTimeout(r, 500));
+  for (let i = 0; i < 60 && await task(); i++) await new Promise((r) => setTimeout(r, 500));
   assert.equal(await task(), '');
 }
 

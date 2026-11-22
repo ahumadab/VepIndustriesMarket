@@ -51,6 +51,8 @@ function Test-Code($api, $code) {
 # The Comparisons of a save, as the game writes them: no indentation, one ["key"] = value per line.
 function Read-Comparisons($text) {
     $block = [regex]::Match($text, '\["comparisons"\] = \{\r?\n((?:\{\r?\n(?:\["\w+"\] = [^\r\n]*\r?\n)*\},?[^\r\n]*\r?\n)*)\}')
+    # a layout it can't read would otherwise empty sent.txt and send nothing, silently
+    if (!$block.Success -and $text.Contains('["comparisons"] = {')) { throw 'Comparaisons illisibles dans la sauvegarde' }
     foreach ($entry in [regex]::Matches($block.Groups[1].Value, '\{\r?\n((?:\["\w+"\] = [^\r\n]*\r?\n)*)\}')) {
         $c = @{}
         foreach ($field in [regex]::Matches($entry.Groups[1].Value, '\["(\w+)"\] = (?:"((?:[^"\\]|\\.)*)"|(-?\d+))')) {
@@ -62,12 +64,14 @@ function Read-Comparisons($text) {
     }
 }
 
+# The code of config.json, encrypted for the Windows user (DPAPI); PSCredential only decrypts it, its name is unused.
+function Read-Code($cfg) {
+    (New-Object PSCredential 'unused', (ConvertTo-SecureString $cfg.code)).GetNetworkCredential().Password
+}
+
 if ($Install) {
     New-Item -ItemType Directory -Force $state | Out-Null
-    $stored = if (Test-Path $config) { Get-Content $config -Raw | ConvertFrom-Json }
-    if (!$Code -and $stored) {
-        $Code = (New-Object PSCredential 'x', (ConvertTo-SecureString $stored.code)).GetNetworkCredential().Password
-    }
+    if (!$Code -and (Test-Path $config)) { $Code = Read-Code (Get-Content $config -Raw | ConvertFrom-Json) }
     while (!$Code -or !(Test-Code $Api $Code)) {
         if ($Code) { Write-Host "Ce code d'invitation est refusé. Vérifiez-le auprès de Boris." }
         $Code = (Read-Host "Code d'invitation").Trim()
@@ -75,9 +79,11 @@ if ($Install) {
     ConvertTo-Json @{ api = $Api; task = $TaskName; code = ConvertTo-SecureString $Code -AsPlainText -Force |
         ConvertFrom-SecureString } | Set-Content $config
 
-    # The task outlives the addon's folder: it then removes itself instead of running the script.
+    # The task outlives the addon's folder: it then removes itself instead of running the script, once the folder
+    # stays away for 10 s (an update of the addon, or npm run deploy, removes it for a moment).
     $script = (Join-Path $PSScriptRoot 'Sync.ps1') -replace "'", "''"
-    $run = "if (Test-Path -LiteralPath '$script') { & '$script' } " +
+    $run = "if (!(Test-Path -LiteralPath '$script')) { Start-Sleep 10 } " +
+        "if (Test-Path -LiteralPath '$script') { & '$script' } " +
         "else { Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:`$false }"
     # conhost --headless: no window, which would take the focus from the game every 15 minutes
     $action = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument ("--headless powershell.exe -NoProfile " +
@@ -86,23 +92,24 @@ if ($Install) {
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
-    Write-Host 'Synchro installée : toutes les 15 minutes, elle envoie vos Comparaisons au VPS quand le jeu a écrit une'
-    Write-Host 'nouvelle sauvegarde. Elle se retire seule si vous supprimez l''addon ou ne jouez plus pendant 30 jours.'
+    Write-Host 'Script de synchro installé : toutes les 15 minutes, il envoie vos Comparaisons au VPS quand le jeu a écrit'
+    Write-Host 'une nouvelle sauvegarde. Il se retire seul si vous supprimez l''addon ou ne jouez plus pendant 30 jours.'
     return
 }
 
 try {
     $cfg = Get-Content $config -Raw | ConvertFrom-Json
     $saves = @(Get-ChildItem "$game\WTF\Account\*\SavedVariables\VepIndustriesMarket.lua" -ErrorAction Ignore)
-    $latest = @($saves) + (Get-Item $config) | Sort-Object LastWriteTime | Select-Object -Last 1
-    if ($latest.LastWriteTime -lt (Get-Date).AddDays(-$IDLE_DAYS)) {
+    $lastActivity = @($saves) + (Get-Item $config) | Sort-Object LastWriteTime | Select-Object -Last 1
+    if ($lastActivity.LastWriteTime -lt (Get-Date).AddDays(-$IDLE_DAYS)) {
         Unregister-ScheduledTask -TaskName $cfg.task -Confirm:$false
         Write-Log "aucune sauvegarde depuis $IDLE_DAYS jours : tâche retirée"
         return
     }
     if ((Test-Path $data) -and !($saves | Where-Object LastWriteTime -gt (Get-Item $data).LastWriteTime)) { return }
 
-    $code = (New-Object PSCredential 'x', (ConvertTo-SecureString $cfg.code)).GetNetworkCredential().Password
+    $code = Read-Code $cfg
+    $latest = $saves | Sort-Object LastWriteTime | Select-Object -Last 1
     $done = @{}
     if (Test-Path $sent) { foreach ($key in [IO.File]::ReadAllLines($sent, $utf8)) { $done[$key] = $true } }
     $all = @(foreach ($save in $saves) { Read-Comparisons ([IO.File]::ReadAllText($save.FullName, $utf8)) })
@@ -114,7 +121,7 @@ try {
 
     # The data file of the auction house last scanned. Its full scan's table holds no other realm or faction key, and
     # its items no string key: the first ones after it are its own, whatever the order the game wrote them in.
-    $text = [IO.File]::ReadAllText(($saves | Sort-Object LastWriteTime | Select-Object -Last 1).FullName, $utf8)
+    $text = [IO.File]::ReadAllText($latest.FullName, $utf8)
     $at = $text.IndexOf('["fullScan"] = {')
     if ($at -lt 0) { Write-Log "$($new.Count) Comparaison(s) envoyée(s), aucun Scan complet : pas de fichier de données"; return }
     $realm = ([regex]'\["realm"\] = "((?:[^"\\]|\\.)*)"').Match($text, $at).Groups[1].Value -replace '\\(.)', '$1'
@@ -123,6 +130,8 @@ try {
     $query = "realm=$([uri]::EscapeDataString($realm))&faction=$faction&dayZero=$dayZero"
     Invoke-Api $cfg.api $code 'GET' "/v1/addon-data?$query" $null "$data.tmp"
     Move-Item "$data.tmp" $data -Force
+    # dated as the save it answers: one the game writes during this run stays newer, for the next run
+    (Get-Item $data).LastWriteTime = $latest.LastWriteTime
     Write-Log "$($new.Count) Comparaison(s) envoyée(s), fichier de données écrit"
 } catch {
     Write-Log "erreur : $_"
