@@ -62,15 +62,39 @@ function GM.Run(where, fn)
     if #jobs == 1 then step() end
 end
 
+-- "25 min", "3 h 05"
+local function duration(s)
+    local m = math.floor(s / 60 + 0.5)
+    return m < 120 and string.format("%d min", m) or string.format("%d h %02d", math.floor(m / 60), m % 60)
+end
+
+local NOT_COMPARED = {
+    first = function() return "premier scan, rien à comparer" end,
+    otherHouse = function() return "autre hôtel des ventes que le précédent, ventes non mesurées" end,
+    tooSoon = function() return "moins de 10 min après le précédent, ventes non mesurées" end,
+    same = function() return "identique au précédent, ventes non mesurées" end,
+    tooLate = function(s) return duration(s) .. " après le précédent (2 h au plus), ventes non mesurées" end,
+}
+
+-- one line after a full scan: what it gave, and when the next one would be compared
+local function outcome(compared, reason, seconds)
+    local what = compared and "ventes mesurées sur " .. duration(seconds) or NOT_COMPARED[reason](seconds)
+    local from, to = M.NextScan()
+    local when = from <= time() and string.format("Prochain scan utile avant %s.", date("%H:%M", to))
+        or string.format("Prochain scan utile entre %s et %s.", date("%H:%M", from), date("%H:%M", to))
+    return string.format("Scan complet enregistré : %d objets, %s. %s", M.Status().items, what, when)
+end
+
 local function ingest(n, get)
     for _, job in ipairs(jobs) do
         if job.where == "scan" then return GM.Say("un Scan complet est déjà en cours d'enregistrement.") end
     end
     GM.Say(string.format("enregistrement du Scan complet en cours (%d enchères)…", n))
     GM.Run("scan", function()
-        local compared = M.Ingest(toFullScan(n, get), time(), GetRealmName(), UnitFactionGroup("player"),
-            UnitName("player"))
-        GM.Say(string.format("Scan complet enregistré : %d objets (/reload pour sauvegarder).", M.Status().items))
+        local compared, reason, seconds = M.Ingest(toFullScan(n, get), time(), GetRealmName(),
+            UnitFactionGroup("player"), UnitName("player"))
+        if compared == nil then return GM.Say("Scan complet vide : ignoré.") end
+        GM.Say(outcome(compared, reason, seconds))
         if compared then GM.Exchange.Announce() end
     end)
 end

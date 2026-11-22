@@ -135,6 +135,27 @@ M.Ingest({ [999] = { tier(1, 1, 1, 3) } }, t3 + 4000, "PvE", "Alliance", "Boris"
 ok(near(rate(910), 36), "autre faction : pas comparee")
 ok(rate(999999) == nil and M.Report(999999).confidence == nil, "objet sans scan complet : pas de ventes, sans erreur")
 
+-- what M.Ingest tells of each scan, and when the next one would be compared (M.NextScan)
+VepIndustriesMarketDB = {}
+local function said(...) return table.concat({ tostring(select(1, ...)), tostring(select(2, ...)), tostring(select(3, ...)) }, " ") end
+ok(M.NextScan() == nil, "sans scan : pas de prochain scan")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 5, 3) } }, t2, "PvE", "Horde", "Boris")) == "false first nil", "premier scan")
+local from, to = M.NextScan()
+ok(from == t2 + 900 and to == t2 + 7200, "prochain scan utile entre +15 min (serveur) et +2 h")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 4, 3) } }, t2 + 300, "PvE", "Horde", "Boris")) == "false tooSoon 300",
+  "moins de 10 min : raison et ecart")
+ok(M.NextScan() == t2 + 900, "scan trop proche : la plage reste celle du scan precedent")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 4, 3) } }, t2 + 1200, "PvE", "Horde", "Boris")) == "false same 1200",
+  "scan identique")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 3, 3) } }, t2 + 1500, "PvE", "Horde", "Boris")) == "true nil 1500",
+  "Comparaison : duree comparee")
+ok(M.NextScan() == t2 + 1500 + 900, "apres une Comparaison : plage depuis ce scan")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 2, 3) } }, t2 + 1500 + 3 * 3600, "PvE", "Horde", "Boris"))
+  == "false tooLate 10800", "plus de 2 h : raison et ecart")
+ok(said(M.Ingest({ [944] = { tier(100, 1, 1, 3) } }, t2 + 4 * 3600 + 1500, "PvE", "Alliance", "Boris"))
+  == "false otherHouse nil", "autre hotel des ventes")
+ok(M.Ingest({}, t2 + 5 * 3600, "PvE", "Horde", "Boris") == nil, "scan vide : nil")
+
 -- a Comparison over midnight: its sales split between both days, prorata of the time on each
 VepIndustriesMarketDB = {}
 M.Ingest({ [940] = { tier(100, 1, 5, 3) } }, t2 - 900, "PvE", "Horde", "Boris")
