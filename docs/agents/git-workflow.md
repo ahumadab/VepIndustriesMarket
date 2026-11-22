@@ -3,7 +3,7 @@
 - `main` : uniquement des versions publiées, chacune taguée `vX.Y.Z`. Jamais de commit direct.
 - `develop` : branche d'intégration, branche par défaut sur GitHub.
 - `feature/<n>-<slug>` : une branche par ticket GitHub `#n`, partie de `develop`, fusionnée dans `develop` par pull request (`Closes #n`).
-- `release/X.Y.Z` : partie de `develop`. On y monte `version` dans `package.json`, on corrige seulement, puis PR vers `main`. Après la fusion, `npm run release` sur `main` (tag + zip), puis on refusionne `main` dans `develop`.
+- `release/X.Y.Z` : partie de `develop`, on y corrige seulement. Boris la lance avec `/release` (`.claude/skills/release/SKILL.md`) : version, PR vers `main`, tag, zip, GitHub Release, refusion dans `develop`.
 - `hotfix/X.Y.Z` : partie de `main` pour une correction urgente, fusionnée dans `main` et dans `develop`.
 
 ## Commandes
