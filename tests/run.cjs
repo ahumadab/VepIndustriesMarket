@@ -1,7 +1,8 @@
 // Runs tests/test.lua with Fengari (Lua 5.3 in JS) and WoW API doubles. Exit code 1 on any failure.
 // With "merge-case" (npm run merge-case), also rewrites the real case of merge-cases.json from Market.Merge, after a
-// change of the merge rule: the server replays the new expectations.
-const { readdirSync, readFileSync, writeFileSync } = require('node:fs');
+// change of the merge rule: the server replays the new expectations, from its copy in vepindustries-api, which
+// merge-case refreshes when that repo is cloned next to this one (AGENTS.md) and every run compares.
+const { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } = require('node:fs');
 const { lua, lauxlib, lualib, to_luastring } = require('fengari');
 process.chdir(__dirname);
 
@@ -64,6 +65,13 @@ if (process.argv[2] === 'merge-case') {
 }
 `);
   console.log('✓ cas réel de merge-cases.json réécrit');
+}
+const SERVER_CASES = '../../vepindustries/api/apps/api/tests/modules/market/application/merge-cases.json';
+if (process.argv[2] === 'merge-case' && existsSync(SERVER_CASES)) {
+  copyFileSync('merge-cases.json', SERVER_CASES);
+  console.log('✓ copié dans vepindustries-api, à y committer');
+} else if (!existsSync(SERVER_CASES) || readFileSync(SERVER_CASES, 'utf8') !== readFileSync('merge-cases.json', 'utf8')) {
+  console.warn(`! merge-cases.json diffère de la copie du serveur ou elle est introuvable : ${SERVER_CASES}`);
 }
 if (failure) {
   console.error('✗ ' + failure);
