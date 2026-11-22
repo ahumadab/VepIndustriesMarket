@@ -143,7 +143,14 @@ local function settle()
 end
 
 local function handle(from, kind, key, text)
-    if kind == "C" then
+    if kind == "C" and from == me() then -- /vim echange: one of ours, back through the chat
+        for _, c in ipairs(comparisons()) do
+            if M.Id(c) == key then
+                GM.Say(string.format("échange : Comparaison %s revenue %s (%d Ko).", key,
+                    X.Encode(c) == text and "intacte" or "|cffff5555abîmée|r", math.floor(#text / 1000 + 0.5)))
+            end
+        end
+    elseif kind == "C" then
         local c = decodeComparison(text)
         if c and c.start and M.Id(c) == key then
             GM.Run("exchange", function()
@@ -181,7 +188,7 @@ local function chunk(from, msg)
     local slot = from .. "\t" .. kind .. key
     local p = parts[slot]
     if i == 1 then
-        if kind == "C" and M.Seen()[key] then return end -- already known: ignored
+        if kind == "C" and from ~= me() and M.Seen()[key] then return end -- already known: ignored
         p = { n = n }
         parts[slot] = p
     elseif not (p and p.n == n and i == #p + 1) then
@@ -192,6 +199,15 @@ local function chunk(from, msg)
     parts[slot] = nil
     local ok, text = pcall(X.Unpack, table.concat(p))
     if ok and type(text) == "string" then handle(from, kind, key, text) end
+end
+
+-- Dev (/vim echange [First-Surname]): whispers our Comparisons to `to`, ourselves by default, through the real chat.
+-- Back to us, each one is checked and told in the chat; to a player offline, "No player named" stays hidden.
+function X.Send(to)
+    to = whisperName(to or me())
+    for _, c in ipairs(comparisons()) do send(to, "C", M.Id(c), X.Encode(c)) end
+    GM.Say(#comparisons() == 0 and "échange : aucune Comparaison à envoyer."
+        or string.format("échange : %d Comparaison(s) en route vers %s, environ une minute chacune.", #comparisons(), to))
 end
 
 function X.Announce()
@@ -231,7 +247,7 @@ f:SetScript("OnEvent", function(_, event, prefix, text, channel, sender)
     end
     if secret(prefix) or secret(text) or secret(sender) or prefix ~= X.PREFIX or type(sender) ~= "string" then return end
     local from = whisperName(sender)
-    if from == me() then return end -- our own announce, back from GUILD
+    if from == me() and channel ~= "WHISPER" then return end -- our own announce, back from GUILD
     if channel == "WHISPER" then return chunk(from, text) end
     local gen, finish = text:match("^A (%d+) (%d+)$")
     if channel == "GUILD" and gen and (tonumber(finish) > generated() or latest() > tonumber(gen)) then

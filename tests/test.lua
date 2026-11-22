@@ -843,9 +843,18 @@ ok(payload(to("Sept-Nom", "C", THEIRS)) and least >= 0.95 and outside < #packed 
   string.format("echange : en instance, %.2f s au moins entre deux messages ; hors instance, %d messages en %.1f s",
     least, #packed, outside))
 
+-- /vim echange: our Comparisons whispered to ourselves come back, checked
+chat.outbox = {}
+SlashCmdList.VEPINDUSTRIESMARKET("echange"); play(60)
+local back, told = {}, lastSaid()
+for _, m in ipairs(chat.outbox) do if m.target == "Boris" then back[#back + 1] = m.text end end
+whisper(back, "Boris"); play(1)
+ok(told:find("2 Comparaison") and #back > #packed and lastSaid():find("revenue intacte")
+  and #VepIndustriesMarketDB.comparisons == 2, "/vim echange : Comparaisons chuchotees a soi-meme, revenues intactes " .. lastSaid())
+
 -- the friend left: the game's "No player named ..." is hidden and the transfer stops; other lines stay
 chat.outbox = {}
-whisper(X.Pack("W", "", "0 0\n" .. MINE), "Parti Loin"); play(3)
+SlashCmdList.VEPINDUSTRIESMARKET("echange Parti Loin"); play(3)
 local before = #to("Parti-Loin")
 local filter = chat.filters.CHAT_MSG_SYSTEM
 local hidden = filter and filter(nil, "CHAT_MSG_SYSTEM", ERR_CHAT_PLAYER_NOT_FOUND_S:format("Parti Loin"))
