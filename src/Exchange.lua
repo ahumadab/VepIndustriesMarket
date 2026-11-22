@@ -1,7 +1,8 @@
 -- VepIndustriesMarket exchange: guild members' addons share their Comparisons in game, by addon messages (#24).
 -- - Announce, on GUILD, at login, after each of our Comparisons, and once a row of received ones has settled:
---   "A <generated> <finish>", the time of our data file (0 without one) and the end of our latest Comparison. NORMAL
---   priority: it gets through a transfer of ours in BULK.
+--   "A <generated> <finish> <version>", the time of our data file (0 without one), the end of our latest Comparison and
+--   our addon's version. NORMAL priority: it gets through a transfer of ours in BULK. Who hears a newer release than
+--   theirs is told in the chat, once (the zip goes from hand to hand, no addon manager updates it).
 -- - Who hears it and may give or take whispers back its inventory, payload "W": "<ask> <generated>", then a line per
 --   Comparison it knows that ends after its data file ("author start", see Market.Id), and one per Comparison it got
 --   part of from that player ("author start chunks").
@@ -19,12 +20,14 @@
 -- line is hidden and that player's transfers dropped. Received chunks wait, per sender, until the end of the session.
 -- ponytail: every announce costs each listener an inventory whisper (~1 KB), even with nothing to give; send the
 -- latest Comparison's id in the announce if a big guild makes that traffic matter.
+local ADDON = ...
 local GM = VepIndustriesMarket
 local M = GM.Market
 GM.Exchange = {}
 local X = GM.Exchange
 
 X.PREFIX = "VepIndMarket"
+local VERSION = C_AddOns.GetAddOnMetadata(ADDON, "Version") or "" -- "x.y.z", or "x.y.z-dev+sha" for a deploy
 local MAX = 255         -- bytes per addon message
 local RETRY = 2         -- seconds before a refused or locked chunk goes again (DungeonForever's wait)
 local INSTANCE_GAP = 1  -- seconds between two whispers in an instance
@@ -212,8 +215,25 @@ end
 
 function X.Announce()
     if IsInGuild() then
-        ChatThrottleLib:SendAddonMessage("NORMAL", X.PREFIX, string.format("A %d %d", generated(), latest()), "GUILD")
+        ChatThrottleLib:SendAddonMessage("NORMAL", X.PREFIX,
+            string.format("A %d %d %s", generated(), latest(), VERSION), "GUILD")
     end
+end
+
+-- a version -> a number that orders versions, nil when it does not match `pattern`
+local RELEASE, ANY = "^(%d+)%.(%d+)%.(%d+)$", "^(%d+)%.(%d+)%.(%d+)" -- ANY: a dev build counts as its x.y.z
+local function rank(v, pattern)
+    local a, b, c = v:match(pattern)
+    return a and (tonumber(a) * 1000 + tonumber(b)) * 1000 + tonumber(c)
+end
+-- the highest version we run or already told: each newer release heard is told once
+local highest = rank(VERSION, ANY) or math.huge
+local function tellIfNewer(v)
+    local r = rank(v, RELEASE)
+    if not r or r <= highest then return end
+    highest = r
+    GM.Say(string.format("version %s disponible (tu as la %s) : demande le zip à Boris et extrais-le dans le dossier "
+        .. "AddOns, par-dessus l'ancienne.", v, VERSION:match("^[%d.]+")))
 end
 
 -- the chat windows' filter: "No player named ..." just after our whisper to that name (in the client's language,
@@ -249,7 +269,8 @@ f:SetScript("OnEvent", function(_, event, prefix, text, channel, sender)
     local from = whisperName(sender)
     if from == me() and channel ~= "WHISPER" then return end -- our own announce, back from GUILD
     if channel == "WHISPER" then return chunk(from, text) end
-    local gen, finish = text:match("^A (%d+) (%d+)$")
+    local gen, finish, version = text:match("^A (%d+) (%d+) ?(%S*)$")
+    if channel == "GUILD" and gen then tellIfNewer(version) end
     if channel == "GUILD" and gen and (tonumber(finish) > generated() or latest() > tonumber(gen)) then
         send(from, "W", "", inventory(from, 1))
     end

@@ -421,6 +421,10 @@ geterrorhandler = function() return function(e) chat.error = e end end
 table.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 IsInInstance = function() return chat.instance end
 IsInGuild = function() return true end
+-- our addon's version as the .toc of a deploy writes it (a release has no "-dev+...")
+C_AddOns = { GetAddOnMetadata = function(name, field)
+  return name == "VepIndustriesMarket" and field == "Version" and "0.2.0-dev+abc1234" or nil
+end }
 ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
 ChatFrameUtil = { AddMessageEventFilter = function(event, fn) chat.filters[event] = fn end }
 -- compression double: the text behind a \0, so that escaping shows
@@ -478,7 +482,7 @@ end
 local okLoad, err = pcall(function()
   dofile("../src/Libs/ChatThrottleLib.lua")
   local chunk = loadfile("../src/Capture.lua"); chunk("VepIndustriesMarket")
-  dofile("../src/Exchange.lua")
+  loadfile("../src/Exchange.lua")("VepIndustriesMarket")
   dofile("../src/UI.lua")
 end)
 ok(okLoad, "chargement ChatThrottleLib + Capture.lua + Exchange.lua + UI.lua " .. tostring(err))
@@ -655,11 +659,11 @@ ok(lastSaid():find("aucun Scan complet en mémoire"), "/vim relire sans scan en 
 -- opening the auction house loads the data file (VepIndustriesMarket_Data, load on demand) once, and tells a file
 -- that a stopped Sync script left behind
 local loads = {}
-C_AddOns = { LoadAddOn = function(name)
+C_AddOns.LoadAddOn = function(name)
   loads[#loads + 1] = name
   VepIndustriesMarketData = { generated = time() - 5 * 86400, daily = {}, counted = {} }
   return true
-end }
+end
 fire("AUCTION_HOUSE_SHOW"); fire("AUCTION_HOUSE_SHOW")
 ok(#loads == 1 and loads[1] == "VepIndustriesMarket_Data" and lastSaid():find("5 jours")
   and lastSaid():find("installer.cmd"), "Script de synchro arrete signale a l'ouverture de l'hotel des ventes " .. lastSaid())
@@ -745,12 +749,25 @@ local packed = X.Pack("C", THEIRS, X.Encode(theirs))
 play(10); chat.outbox = {} -- the announces of the tests above
 
 fire("PLAYER_LOGIN"); play(15)
-ok(guild() == "A 0 " .. (t2 + 919), "echange : annonce en guilde a la connexion " .. tostring(guild()))
+ok(guild() == "A 0 " .. (t2 + 919) .. " 0.2.0-dev+abc1234", "echange : annonce en guilde a la connexion " .. tostring(guild()))
 chat.outbox = {}
 heard("A 0 " .. theirs.finish, "GUILD", "Ami Epice"); play(1)
 ok(payload(to("Ami-Epice", "W")) == "1 0\n" .. MINE, "echange : annonce entendue -> inventaire chuchote, au nom Prenom-Nom")
 heard("A 0 0", "GUILD", "Boris"); heard("A 0 " .. theirs.finish, "PARTY", "Ami Epice")
 ok(#to("Boris") == 0 and #to("Ami-Epice") == 1, "echange : notre propre annonce et les autres canaux ignores")
+
+-- a newer release in a guild member's announce: told once; an older one, the same, or a dev build: nothing
+local function news(version)
+  local before = #said
+  heard("A 9999999999 0 " .. version, "GUILD", "Ami Epice") -- nothing to give: no inventory whispered
+  return #said > before and lastSaid() or nil
+end
+local fresh = news("0.2.1")
+ok(fresh and fresh:find("0.2.1", 1, true) and fresh:find("0.2.0", 1, true) and fresh:find("zip"),
+  "echange : version plus recente annoncee en guilde -> signalee " .. tostring(fresh))
+ok(not news("0.2.1") and not news("0.2.0") and not news("0.1.9") and not news("0.3.0-dev+abc") and not news("x"),
+  "echange : meme version deja signalee, plus ancienne, identique ou de developpement -> rien")
+ok(news("0.10.0"), "echange : versions comparees nombre par nombre (0.10.0 apres 0.2.1)")
 
 -- the friend's inventory lacks ours and lists one of theirs: ours goes, cut into messages, then our inventory
 chat.outbox = {}
@@ -773,7 +790,7 @@ local got = VepIndustriesMarketDB.comparisons and VepIndustriesMarketDB.comparis
 local early = guild()
 play(60)
 ok(got.author == "Boris" and got.start == t2 and got.finish == t2 + 919 and got.items == mine.items
-  and not early and guild() == "A 0 " .. (t2 + 919),
+  and not early and guild() == "A 0 " .. (t2 + 919) .. " 0.2.0-dev+abc1234",
   "echange : Comparaison reassemblee chez un autre, gardee, annoncee une minute apres la derniere recue")
 VepIndustriesMarketDB = ours
 -- before the auction house loads the data file, the time of the one the previous session loaded
@@ -791,7 +808,8 @@ local inv = payload(to("Ami-Epice", "W")) or ""
 ok(inv:find("\n" .. THEIRS .. " 5", 1, true), "echange : transfert interrompu, inventaire avec les morceaux recus " .. inv)
 chat.outbox = {}
 whisper(packed, "Ami Epice", 6); play(61)
-ok(#VepIndustriesMarketDB.comparisons == 2 and M.Seen()[THEIRS] == theirs.finish and guild() == "A 0 " .. theirs.finish,
+ok(#VepIndustriesMarketDB.comparisons == 2 and M.Seen()[THEIRS] == theirs.finish
+  and guild() == "A 0 " .. theirs.finish .. " 0.2.0-dev+abc1234",
   "echange : transfert repris, Comparaison gardee et annoncee (relais)")
 -- our side resumed: the friend got 20 messages of ours
 chat.outbox = {}

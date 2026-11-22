@@ -8,7 +8,7 @@ Chaque Scan complet d'Auctionator (mode replicate) est enregistré en forme comp
 
 ## Script de synchro
 
-`src/Sync.ps1` (Windows PowerShell 5.1) envoie au VPS les Comparaisons de la sauvegarde et écrit le fichier de données de l'addon, `Data.lua`, dans l'addon `VepIndustriesMarket_Data`, chargé à la demande à la première ouverture de l'hôtel des ventes de la session : un fichier écrit jeu ouvert y est donc lu. L'addon s'appuie alors sur le Résumé journalier fusionné du fichier et y ajoute ses Comparaisons que le fichier ne compte pas encore ; il signale dans la discussion un fichier qui a plus de 3 jours de retard sur son dernier Scan complet (Script de synchro arrêté). Les jours postérieurs au fichier viennent de son propre Résumé journalier. Une mise à jour de l'addon par CurseForge efface `Data.lua` jusqu'au passage suivant. Un double-clic sur `installer.cmd`, dans le dossier de l'addon, demande le code d'invitation (créé par Boris : `POST /v1/sync-codes`) et crée la tâche planifiée `VepIndustriesMarket`, sans droits d'administrateur. Le code n'est redemandé que s'il est refusé.
+`src/Sync.ps1` (Windows PowerShell 5.1) envoie au VPS les Comparaisons de la sauvegarde et écrit le fichier de données de l'addon, `Data.lua`, dans l'addon `VepIndustriesMarket_Data`, chargé à la demande à la première ouverture de l'hôtel des ventes de la session : un fichier écrit jeu ouvert y est donc lu. L'addon s'appuie alors sur le Résumé journalier fusionné du fichier et y ajoute ses Comparaisons que le fichier ne compte pas encore ; il signale dans la discussion un fichier qui a plus de 3 jours de retard sur son dernier Scan complet (Script de synchro arrêté). Les jours postérieurs au fichier viennent de son propre Résumé journalier. Le zip d'une nouvelle version ne contient pas `Data.lua` : extrait par-dessus l'ancienne, il le garde. Un double-clic sur `installer.cmd`, dans le dossier de l'addon, demande le code d'invitation (créé par Boris : `POST /v1/sync-codes`) et crée la tâche planifiée `VepIndustriesMarket`, sans droits d'administrateur. Le code n'est redemandé que s'il est refusé.
 
 - Toutes les 15 minutes de la session Windows, sans fenêtre (`conhost --headless`) : rien à faire si aucune sauvegarde n'est plus récente que `Data.lua` ; sinon envoi des Comparaisons pas encore envoyées, par lots de 5, puis `Data.lua` de l'hôtel des ventes du dernier Scan complet.
 - La tâche se retire si le dossier de l'addon a disparu, ou après 30 jours sans nouvelle sauvegarde.
@@ -20,7 +20,14 @@ Chaque Scan complet d'Auctionator (mode replicate) est enregistré en forme comp
 
 ## Échange en jeu
 
-Les membres de la guilde connectés qui ont l'addon s'échangent leurs Comparaisons sans `/reload`, avec ou sans Script de synchro (`src/Exchange.lua`, protocole en tête du fichier) : chacun s'annonce sur le canal de guilde à la connexion et après chaque nouvelle Comparaison, puis les autres lui envoient en chuchotement celles qui lui manquent et qui sont postérieures à son fichier de données. Une Comparaison reçue est gardée comme les nôtres (envoyée au VPS par le Script de synchro, retransmise aux membres connectés ensuite). Les envois passent par ChatThrottleLib (`src/Libs`, domaine public), à ~800 octets/s hors instance et un message par seconde en instance ; un refus pour débit ou un blocage pendant un combat les retarde sans rien perdre, et un transfert interrompu reprend au morceau atteint, tant que le destinataire n'a pas relancé le jeu. `npm run report` donne les Comparaisons gardées par auteur.
+Les membres de la guilde connectés qui ont l'addon s'échangent leurs Comparaisons sans `/reload`, avec ou sans Script de synchro (`src/Exchange.lua`, protocole en tête du fichier) : chacun s'annonce sur le canal de guilde à la connexion et après chaque nouvelle Comparaison, puis les autres lui envoient en chuchotement celles qui lui manquent et qui sont postérieures à son fichier de données. Une Comparaison reçue est gardée comme les nôtres (envoyée au VPS par le Script de synchro, retransmise aux membres connectés ensuite). Les envois passent par ChatThrottleLib (`src/Libs`, domaine public), à ~800 octets/s hors instance et un message par seconde en instance ; un refus pour débit ou un blocage pendant un combat les retarde sans rien perdre, et un transfert interrompu reprend au morceau atteint, tant que le destinataire n'a pas relancé le jeu. `npm run report` donne les Comparaisons gardées par auteur. L'annonce porte aussi la version de l'addon : qui entend une version publiée plus récente que la sienne (pas une version de développement) en est averti une fois dans la discussion.
+
+## Diffusion
+
+Le dépôt est privé et l'addon n'est sur aucun gestionnaire d'addons : Boris envoie lui-même le zip de `npm run release` (`dist/VepIndustriesMarket-x.y.z.zip`) à ses amis.
+
+- Première installation : extraire le zip dans `World of Warcraft\_forever_\Interface\AddOns`, de façon que les deux dossiers `VepIndustriesMarket` et `VepIndustriesMarket_Data` soient directement dans `AddOns` (« Extraire tout » de Windows propose un sous-dossier `VepIndustriesMarket-x.y.z` : le retirer du chemin, sinon le jeu ne voit pas l'addon), double-cliquer sur `AddOns\VepIndustriesMarket\installer.cmd` et y saisir le code d'invitation donné par Boris, puis lancer le jeu.
+- Nouvelle version : l'addon la signale en jeu dès qu'un membre de la guilde connecté l'a. Extraire le nouveau zip au même endroit, en remplaçant les fichiers existants ; il sert au lancement suivant du jeu. `Data.lua` et la tâche planifiée restent en place : rien à réinstaller.
 
 ## Développement
 
@@ -28,7 +35,7 @@ Les membres de la guilde connectés qui ont l'addon s'échangent leurs Comparais
 npm install
 npm test          # logique + smoke test UI (Fengari + doublures de l'API WoW)
 npm run deploy    # tests -> copie dans AddOns/VepIndustriesMarket et AddOns/VepIndustriesMarket_Data (version x.y.z-dev+sha, Data.lua gardé)
-npm run release   # sur main uniquement : idem + zip dans dist/ + tag git vX.Y.Z
+npm run release   # sur main uniquement : idem + zip dans dist/ (à envoyer aux amis) + tag git vX.Y.Z
 ```
 
 Dossier du jeu : variable `WOW_ADDONS`, par défaut `C:/Program Files (x86)/World of Warcraft/_forever_/Interface/AddOns`.
