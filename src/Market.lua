@@ -117,23 +117,33 @@ local MIN_GAP = 600
 -- scans further apart than this are not compared: Long auctions could expire in between and pass for sold
 local MAX_GAP = 7200
 
--- Units bought over `gap` seconds between two scans of an item, buyers taking the cheapest first: per unit price
--- up to the new lowest one, the units gone beyond those of auctions that may have expired. Dearer units gone were
--- cancelled, and a seller reposting cheaper lowers the new lowest price: neither counts (real scan of 2026-11-21:
--- 38 897 arrows "sold" in 17 min, counting every tier gone). Lot sizes are ignored: buying part of a commodity
--- auction shrinks its lot.
+-- Units probably bought over `gap` seconds, buyers taking the cheapest first; possible expiry is excluded.
+-- Normally count disappearances up to the new lowest price. If undercut, also consider the OLD lowest price,
+-- discounting all visible increases at ANY price as possible reposts. Keep the larger of that conservative net
+-- estimate and the usual estimate, never add them (same disappearances). Dearer cancellations stay excluded:
+-- counting every tier gone once produced 38 897 bogus arrow sales. Lot sizes are ignored (partial purchases).
+-- No auction IDs: cancellations at the cheapest price remain indistinguishable from purchases.
 local function estimatedSales(before, after, gap)
-    local low, left, gone, units = after[1] and after[1].price or math.huge, {}, {}, 0 -- after: by price
+    local low = after[1] and after[1].price or math.huge -- sorted by price
+    local oldLow = before[1] and before[1].price or math.huge
+    local limit, left, gone, units, candidates = math.max(low, oldLow), {}, {}, 0, 0
     for _, t in ipairs(after) do left[t.price] = (left[t.price] or 0) + t.size * t.count end
     for _, t in ipairs(before) do
-        if t.price <= low then
-            local g = gone[t.price] or { units = 0, expired = 0 }
-            gone[t.price] = g
-            g.units = g.units + t.size * t.count
-            if (BAND_MIN[t.timeLeft] or 0) < gap then g.expired = g.expired + t.size * t.count end
-        end
+        local g = gone[t.price] or { units = 0, expired = 0 }
+        gone[t.price] = g
+        g.units = g.units + t.size * t.count
+        if (BAND_MIN[t.timeLeft] or 0) < gap then g.expired = g.expired + t.size * t.count end
     end
-    for price, g in pairs(gone) do units = units + math.max(0, g.units - (left[price] or 0) - g.expired) end
+    for price, g in pairs(gone) do
+        local missing = math.max(0, g.units - (left[price] or 0) - g.expired)
+        if price <= low then units = units + missing end
+        if price <= limit then candidates = candidates + missing end
+    end
+    if low < oldLow then
+        local added = 0
+        for price, n in pairs(left) do added = added + math.max(0, n - (gone[price] and gone[price].units or 0)) end
+        units = math.max(units, candidates - added)
+    end
     return units
 end
 

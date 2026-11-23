@@ -311,13 +311,14 @@ local function realPair(before, after, t1, t2, ids)
 end
 -- the first scan's time is unknown: compared as if 1 h apart (Short and Medium may expire)
 local total, selling, of = realPair(FULLSCAN, FULLSCAN_1121_2023, FULLSCAN_1121_2023_TIME - 3600, FULLSCAN_1121_2023_TIME,
-  { 2512, 5479, 3858, 11083 })
-ok(total == 7165 and selling == 147 and of[1] == 0 and of[2] == 368 and of[3] == 1022 and of[4] == 863,
+  { 2512, 5479, 3858, 11083, 6042 })
+ok(total == 7191 and selling == 152 and of[1] == 0 and of[2] == 368 and of[3] == 1022 and of[4] == 863 and of[5] == 20,
   string.format("scans reels, 1 h : %d unites vendues sur %d objets (fleches grossieres 2512 : %d, stock en hausse)",
     total, selling, of[1]))
 -- consecutive autoscans 919 s apart (Short only may expire)
-total, selling, of = realPair(FULLSCAN_1121_2023, FULLSCAN_1121_2039, FULLSCAN_1121_2023_TIME, FULLSCAN_1121_2039_TIME, { 2512, 4306 })
-ok(total == 4227 and selling == 110 and of[1] == 0 and of[2] == 1315,
+total, selling, of = realPair(FULLSCAN_1121_2023, FULLSCAN_1121_2039, FULLSCAN_1121_2023_TIME, FULLSCAN_1121_2039_TIME,
+  { 2512, 4306, 3356, 2251 })
+ok(total == 4333 and selling == 117 and of[1] == 0 and of[2] == 1315 and of[3] == 16 and of[4] == 83,
   string.format("scans reels consecutifs, 919 s : %d unites vendues sur %d objets", total, selling))
 
 -- merge by Tranche: the cases shared with the server (tests/merge-cases.json, read by tests/run.cjs)
@@ -342,16 +343,17 @@ local function sold(tranches)
   for _, ks in pairs(tranches) do for _, v in pairs(ks) do units = units + v[1] end end
   return math.floor(units + 0.5)
 end
-local real = VepIndustriesMarketDB.comparisons[1] -- 2023 -> 2039, 919 s, 4227 units
+local real = VepIndustriesMarketDB.comparisons[1] -- 2023 -> 2039, 919 s, 4333 units
 local twin = { author = "Ami", start = real.start, finish = real.finish, items = real.items }
 local later = { author = "Ami", start = real.start + 600, finish = real.finish + 600, items = real.items }
-ok(sold(M.Merge({ real }, DAY0)) == 4227 and sold(M.Merge({ real, twin }, DAY0)) == 4227
+ok(sold(M.Merge({ real }, DAY0)) == 4333 and sold(M.Merge({ real, twin }, DAY0)) == 4333
   and sameTranches(M.Merge({ real, twin }, DAY0), M.Merge({ real }, DAY0)),
-  "fusion des scans reels : seul, 4227 unites ; meme Comparaison chez un ami, pas comptee deux fois")
+  "fusion des scans reels : seul, 4333 unites ; meme Comparaison chez un ami, pas comptee deux fois")
 -- 10 min later the friend's Comparison sits in the second Tranche only: the first keeps our share alone, the second
--- averages our share and all of the friend's units (same pair in tests/merge-cases.json, for the server)
+-- averages our share and all of the friend's units. The shared merge-cases.json keeps its historical Comparison
+-- (4 227 units, inferred before the undercut correction); the merge rule and wire format have not changed.
 local first = 1800 - (real.start - DAY0) % 1800
-local expect = 4227 * (first / 919 + ((919 - first) / 919 + 1) / 2)
+local expect = 4333 * (first / 919 + ((919 - first) / 919 + 1) / 2)
 ok(sold(M.Merge({ real, later }, DAY0)) == math.floor(expect + 0.5),
   string.format("fusion des scans reels : ami decale de 10 min, moyenne sur la Tranche commune (%.1f)", expect))
 -- the same pair as JSON, times from day 0: npm run merge-case writes it as the real case of tests/merge-cases.json
