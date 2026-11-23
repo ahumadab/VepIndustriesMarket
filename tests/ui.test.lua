@@ -58,6 +58,9 @@ ok(tipSell and tipSell:find("< 1 h", 1, true) and not tipSell:find("~3 h", 1, tr
 local winSell = VepIndustriesMarket.SellText({ selling = selling, confidence = "low" }, true)
 ok(winSell and winSell:find("< 1 h", 1, true) and winSell:find("~3 h", 1, true) and winSell:find("> 7 j", 1, true)
   and winSell:find("|cff9d9d9d", 1, true), "fenetre : trois prix, grises si non fiable " .. tostring(winSell))
+ok(VepIndustriesMarket.Money(123456, true) == "12|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t 34|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t"
+  and VepIndustriesMarket.Money(4549, true):find("49|TInterface\\MoneyFrame\\UI-CopperIcon", 1, true) ~= nil,
+  "prix courts : sans cuivre des qu'il y a de l'or")
 ok(VepIndustriesMarket.SellText({}) == nil, "sans temps pour vendre : rien")
 local none = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 0, goldPerDay = 0,
   scarce = true })

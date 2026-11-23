@@ -59,7 +59,7 @@ function GM.SellText(r, all)
     local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
     local parts = {}
     for i = 1, all and #s or 1 do
-        parts[#parts + 1] = GM.Money(s[i].price) .. c .. " : " .. sellDuration(s[i].seconds) .. "|r"
+        parts[#parts + 1] = GM.Money(s[i].price, true) .. c .. " : " .. sellDuration(s[i].seconds) .. "|r"
     end
     return table.concat(parts, c .. " · |r")
 end
@@ -89,7 +89,7 @@ function GM.TrendText(r, sep)
 end
 
 ---------------------------------------------------------------- window
-local W, H, SPAN = 340, 120, 21
+local W, H, SPAN = 420, 120, 21 -- wide enough for the three prices of "Vendu en"
 local f = CreateFrame("Frame", "VepIndustriesMarketTrendFrame", UIParent, "BackdropTemplate")
 f:SetSize(W + 30, H + 182) -- 4 lines of verdict above the graph
 f:SetPoint("CENTER", 300, 100)
@@ -195,14 +195,15 @@ end
 
 -- 123456 -> "12<gold icon> 34<silver icon> 56<copper icon>": the game's coin icons, which Auctionator uses on Forever
 -- too (GetCoinTextureString is missing there); letters read as units of time next to "~2 h"
-function GM.Money(c)
+-- short: no copper once there is gold (an order of magnitude, for the three prices of "Vendu en")
+function GM.Money(c, short)
     if not c then return "?" end
     c = math.floor(c)
     local g, s, cu = math.floor(c / 10000), math.floor(c / 100) % 100, c % 100
     local out = {}
     if g > 0 then out[#out + 1] = g .. COIN_ICON.g end
     if s > 0 or g > 0 then out[#out + 1] = s .. COIN_ICON.s end
-    if cu > 0 or #out == 0 then out[#out + 1] = cu .. COIN_ICON.c end
+    if (cu > 0 and not (short and g > 0)) or #out == 0 then out[#out + 1] = cu .. COIN_ICON.c end
     return table.concat(out, " ")
 end
 local money = GM.Money
