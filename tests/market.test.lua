@@ -159,8 +159,25 @@ ok(said(M.Ingest({ [944] = { tier(100, 1, 1, 3) } }, t2 + 4 * 3600 + 1500, "PvE"
   == "false otherHouse nil", "autre hotel des ventes")
 ok(M.Ingest({}, t2 + 5 * 3600, "PvE", "Horde", "Boris") == nil, "scan vide : nil")
 local few = M.Report(944)
+ok(few.selling == nil, "pas assez de scans : pas de temps pour vendre")
 ok(few.scarce and few.estimatedSalesSeconds == 1500 and few.confidence == "low" and few.source == "trend"
   and few.daily[TODAY].scarce, "25 min comparees en tout : pas assez de scans, verdict de la tendance")
+
+-- time to sell at a price: the units cheaper or at that price in the latest full scan, plus one lot of the most common
+-- size, at the pace of the estimated sales (24 sold in 1 h here)
+VepIndustriesMarketDB = {}
+M.Ingest({ [945] = { tier(100, 1, 30, 3), tier(110, 1, 10, 3) } }, t2, "PvE", "Horde", "Boris")
+M.Ingest({ [945] = { tier(100, 1, 6, 3), tier(104, 1, 4, 3), tier(110, 1, 10, 3) } }, t2 + 3600, "PvE", "Horde", "Boris")
+local sell = M.Report(945).selling or {}
+ok(#sell == 3 and sell[1].price == 99 and sell[1].ahead == 0 and near(sell[1].seconds, 150)
+  and sell[2].price == 105 and sell[2].ahead == 10 and near(sell[2].seconds, 1650)
+  and sell[3].price == 110 and sell[3].ahead == 20 and near(sell[3].seconds, 3150),
+  "temps pour vendre : plus bas - 1c, +5 %, +10 %, file devant soi + un lot")
+VepIndustriesMarketDB = {}
+M.Ingest({ [946] = { tier(100, 20, 3, 3) } }, t2, "PvE", "Horde", "Boris")
+M.Ingest({ [946] = { tier(100, 20, 3, 3), tier(150, 20, 1, 3) } }, t2 + 3600, "PvE", "Horde", "Boris")
+sell = M.Report(946).selling or {}
+ok(sell[1] and sell[1].seconds == math.huge, "aucune vente mesuree : temps infini")
 
 -- a Comparison over midnight: its sales split between both days, prorata of the time on each
 VepIndustriesMarketDB = {}

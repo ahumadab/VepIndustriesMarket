@@ -39,6 +39,27 @@ local function roughMoney(c)
     return string.format("%ds", math.floor(c / 100 + 0.5))
 end
 
+-- 600 -> "< 1 h", 3 h -> "~3 h", 2 days -> "~2 j", beyond a week (or no sale measured) -> "> 7 j"
+local function sellDuration(s)
+    if s < 3600 then return "< 1 h" end
+    if s < 86400 then return string.format("~%d h", math.floor(s / 3600 + 0.5)) end
+    if s <= 7 * 86400 then return string.format("~%d j", math.floor(s / 86400 + 0.5)) end
+    return "> 7 j"
+end
+
+-- Time to sell from r.selling (Market.Report): the lowest price only (tooltip), or the three prices (window, all);
+-- greyed while the estimated sales are not reliable. nil without it.
+function GM.SellText(r, all)
+    local s = r.selling
+    if not s then return nil end
+    local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
+    local parts = {}
+    for i = 1, all and #s or 1 do
+        parts[#parts + 1] = GM.Money(s[i].price) .. " " .. c .. sellDuration(s[i].seconds) .. "|r"
+    end
+    return table.concat(parts, c .. " · |r")
+end
+
 -- r: a Market.Report; sep: between the verdict and the estimated sales, "  " by default (tooltip), a line break in
 -- the window, too narrow for both on one line
 function GM.TrendText(r, sep)
@@ -66,7 +87,7 @@ end
 ---------------------------------------------------------------- window
 local W, H, SPAN = 340, 120, 21
 local f = CreateFrame("Frame", "VepIndustriesMarketTrendFrame", UIParent, "BackdropTemplate")
-f:SetSize(W + 30, H + 168) -- 3 lines of verdict above the graph
+f:SetSize(W + 30, H + 182) -- 4 lines of verdict above the graph
 f:SetPoint("CENTER", 300, 100)
 f:SetFrameStrata("DIALOG")
 f:SetBackdrop({
@@ -104,7 +125,7 @@ hintFS:SetPoint("BOTTOMLEFT", 14, 8)
 hintFS:SetText("Survole un objet.  /vim item <lien> pour figer, /vim unpin")
 
 local graph = CreateFrame("Frame", nil, f)
-graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -114)
+graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -128)
 local gbg = graph:CreateTexture(nil, "BACKGROUND"); gbg:SetAllPoints(); gbg:SetColorTexture(1, 1, 1, 0.04)
 local maxPFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); maxPFS:SetPoint("BOTTOMLEFT", graph,
     "TOPLEFT", 0, 2)
@@ -169,7 +190,7 @@ local function hideAll()
 end
 
 -- 123456 -> "12|cffffd700g|r 34|cffc7c7cfs|r 56|cffeda55fc|r" (GetCoinTextureString is missing on Forever)
-local function money(c)
+function GM.Money(c)
     if not c then return "?" end
     c = math.floor(c)
     local g, s, cu = math.floor(c / 10000), math.floor(c / 100) % 100, c % 100
@@ -179,6 +200,7 @@ local function money(c)
     if cu > 0 or #out == 0 then out[#out + 1] = cu .. hex(COIN.c) .. "c|r" end
     return table.concat(out, " ")
 end
+local money = GM.Money
 
 -- hovering a day lists its values: view = { first = Auctionator day of column 1, hist = { [day] = entry }, daily }
 local view = { hist = {}, daily = {} }
@@ -235,8 +257,10 @@ function GM.ShowItem(itemID, force)
     end
     emptyFS:Hide()
     local last = hist[#hist]
+    local sell = GM.SellText(r, true)
     verdictFS:SetText(GM.TrendText(r, "\n") .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
-        "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?"))
+        "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?")
+        .. (sell and "\n" .. hex(TEXT.bright) .. "Vendu en|r " .. sell or ""))
 
     local pts, maxP, minP, maxS = {}, 0, math.huge, 0
     for _, e in ipairs(hist) do
@@ -311,6 +335,8 @@ local function onItemTooltip(tooltip, itemID)
     if #r.history > 0 or r.source == "sales" then
         tooltip:AddDoubleLine(hex(TITLE) .. (r.source == "sales" and "Ventes estimées " or "Tendance ") .. M.WINDOW
             .. " j|r", GM.TrendText(r))
+        local sell = GM.SellText(r)
+        if sell then tooltip:AddDoubleLine(hex(TITLE) .. "Vendu en|r", sell) end
     end
     if f:IsShown() and tooltip == GameTooltip then GM.ShowItem(itemID) end
 end

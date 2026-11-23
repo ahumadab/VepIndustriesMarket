@@ -453,9 +453,30 @@ local function dailyOf(db, id)
     return daily
 end
 
+-- Time to sell at `price`: { price, ahead (units of the full scan's tiers at or below that price), seconds (ahead plus
+-- one lot of `lot` units, at `perDay`; math.huge without any sale measured) }
+local function sellAt(tiers, perDay, price, lot)
+    local ahead = 0
+    for _, t in ipairs(tiers) do
+        if t.price <= price then ahead = ahead + t.size * t.count end
+    end
+    return { price = price, ahead = ahead, seconds = perDay > 0 and (ahead + lot) * 86400 / perDay or math.huge }
+end
+
+-- the lot size most units of the full scan are listed in: what a seller of that item usually posts
+local function commonLot(tiers)
+    local units, best = {}, nil
+    for _, t in ipairs(tiers) do
+        units[t.size] = (units[t.size] or 0) + t.size * t.count
+        if not best or units[t.size] > units[best] then best = t.size end
+    end
+    return best or 1
+end
+
 -- { verdict, source, trend = { price, stock, days, age }, estimatedSalesPerDay, estimatedSalesDays (compared days in
 -- the window), estimatedSalesSeconds (compared time in the window), scarce, goldPerDay (copper: estimatedSalesPerDay x
--- the lowest price of the latest full scan, nil without either), confidence, history, today, tiers, daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
+-- the lowest price of the latest full scan, nil without either), selling (time to sell one lot of the usual size just
+-- under the lowest price, at +5 % and +10 %: see sellAt; nil without estimated sales or when scarce), confidence, history, today, tiers, daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
 -- (source "trend"); the stock they are set against is the item's in the latest full scan, 0 when absent.
 -- price/stock: relative change of the latest day vs the median of the window; history: ascending { day, price, stock }
 -- tiers: the item in the latest full scan, by price, lot size, time left; daily: { [day] = { price, stock, scans,
@@ -485,6 +506,13 @@ function M.Report(itemID)
         end
     end
     local tiers, verdict, source = encoded and decode(encoded) or {}, r.verdict, "trend"
+    -- time to sell one lot just under the lowest price, at +5 % and at +10 %
+    local selling
+    if perDay and not scarce and tiers[1] then
+        local low, lot = tiers[1].price, commonLot(tiers)
+        selling = { sellAt(tiers, perDay, math.max(1, low - 1), lot), sellAt(tiers, perDay, math.floor(low * 1.05), lot),
+            sellAt(tiers, perDay, math.floor(low * 1.10), lot) }
+    end
     if perDay and reliable then
         local stock = 0
         for _, t in ipairs(tiers) do stock = stock + t.size * t.count end
@@ -499,6 +527,7 @@ function M.Report(itemID)
         estimatedSalesDays = days,
         estimatedSalesSeconds = seconds,
         goldPerDay = perDay and tiers[1] and perDay * tiers[1].price or nil,
+        selling = selling,
         scarce = scarce,
         confidence = perDay and (reliable and "high" or "low") or nil,
         history = hist,
