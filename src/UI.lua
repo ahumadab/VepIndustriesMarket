@@ -129,7 +129,7 @@ end
 ---------------------------------------------------------------- window
 local W, H, SPAN = 340, 120, 21
 local f = CreateFrame("Frame", "VepIndustriesMarketTrendFrame", UIParent, "BackdropTemplate")
-f:SetSize(W + 30, H + 238) -- up to 8 lines of verdict above the graph
+f:SetSize(W + 30, H + 238) -- fit() resizes it to its text
 f:SetPoint("CENTER", 300, 100)
 f:SetFrameStrata("DIALOG")
 f:SetBackdrop({
@@ -281,6 +281,16 @@ for i = 1, SPAN do
 end
 
 local current, pinned
+-- the window to its text: as wide as the longest line (never under the graph's width), the graph centred just under
+-- the last line
+local function fit()
+    local w = math.max(W + 30, verdictFS:GetStringWidth() + 28)
+    local top = 52 + verdictFS:GetStringHeight() + 22
+    nameFS:SetWidth(w - 50)
+    graph:ClearAllPoints(); graph:SetPoint("TOP", f, "TOP", 0, -top)
+    f:SetSize(w, top + H + 54)
+end
+
 function GM.ShowItem(itemID, force)
     if not itemID then return end
     if pinned and not force then return end
@@ -296,6 +306,7 @@ function GM.ShowItem(itemID, force)
         verdictFS:SetText(hex(COLOR.none) .. "Aucune donnée Auctionator pour cet objet.|r")
         emptyFS:SetText("Fais un Full Scan à l'hôtel des ventes"); emptyFS:Show()
         maxPFS:SetText(""); maxSFS:SetText(""); maxSalesFS:SetText("")
+        fit()
         return
     end
     emptyFS:Hide()
@@ -304,6 +315,7 @@ function GM.ShowItem(itemID, force)
     verdictFS:SetText(GM.AdviceText(r) .. "\n" .. GM.TrendText(r, "\n") .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
         "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?")
         .. (sell and "\n" .. hex(TEXT.bright) .. "Vendu en :|r\n" .. sell or ""))
+    fit()
 
     local pts, maxP, minP, maxS = {}, 0, math.huge, 0
     for _, e in ipairs(hist) do

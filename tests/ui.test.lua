@@ -104,6 +104,21 @@ local okWin, e3 = pcall(function()
 end)
 ok(okWin, "fenetre + commandes " .. tostring(e3))
 
+-- the /vim window fits its text: taller with more lines, wider than its 370 px with a long line
+local win
+for _, fr in ipairs(frames) do if fr.frameName == "VepIndustriesMarketTrendFrame" then win = fr end end
+VepIndustriesMarket.ShowItem(999999, true)
+local emptyH = win.height
+VepIndustriesMarket.ShowItem(4338, true)
+local fullW, fullH = win.width, win.height
+local advice = VepIndustriesMarket.AdviceText
+VepIndustriesMarket.AdviceText = function() return string.rep("x", 100) end
+VepIndustriesMarket.ShowItem(4338, true)
+local wideW = win.width
+VepIndustriesMarket.AdviceText = advice
+ok(fullW == 370 and fullH > emptyH and wideW == 100 * 6 + 28,
+  string.format("fenetre a la taille du texte : %s x %s, vide %s, ligne longue %s", fullW, fullH, emptyH, wideW))
+
 -- /vim window: one estimated sales bar per compared day, from the real scan pairs replayed on earlier days; coloured
 -- in the window of a reliable estimate, grey elsewhere (colours of src/UI.lua: SALES and COLOR.none)
 local SALES, GREY = "0.30 0.90 0.40 0.70", "0.60 0.60 0.60 0.45"
