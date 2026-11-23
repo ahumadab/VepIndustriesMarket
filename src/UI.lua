@@ -15,7 +15,11 @@ local TITLE = { 1.00, 0.82, 0.00 } -- tooltip label, the game's gold
 -- text only: muted (not reliable, day counts), bright (reliable values), a % change (neutral, good, bad), coins
 local TEXT = { muted = { 0.616, 0.616, 0.616 }, bright = { 1.00, 1.00, 1.00 }, neutral = { 0.80, 0.80, 0.80 },
     good = { 0.40, 1.00, 0.40 }, bad = { 1.00, 0.40, 0.40 } }
-local COIN = { g = { 1.00, 0.844, 0.00 }, s = { 0.781, 0.781, 0.812 }, c = { 0.93, 0.648, 0.373 } }
+local COIN_ICON = {
+    g = "|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t",
+    s = "|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t",
+    c = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t",
+}
 local function hex(c) return string.format("|cff%02x%02x%02x", math.floor(c[1] * 255), math.floor(c[2] * 255),
         math.floor(c[3] * 255)) end
 -- invert: for stock, more is bad for a seller (red)
@@ -33,10 +37,31 @@ local function perDayText(perDay)
         string.format("%d", math.floor(perDay + 0.5))
 end
 
--- 8100000 copper -> "810g", 4500 -> "45s": an order of magnitude, plain (no coin colour, so it greys with its line)
+-- 8100000 copper -> "810<gold icon>", 4500 -> "45<silver icon>": an order of magnitude
 local function roughMoney(c)
-    if c >= 10000 then return string.format("%dg", math.floor(c / 10000 + 0.5)) end
-    return string.format("%ds", math.floor(c / 100 + 0.5))
+    if c >= 10000 then return string.format("%d", math.floor(c / 10000 + 0.5)) .. COIN_ICON.g end
+    return string.format("%d", math.floor(c / 100 + 0.5)) .. COIN_ICON.s
+end
+
+-- 600 -> "< 1 h", 3 h -> "~3 h", 2 days -> "~2 j", beyond a week (or no sale measured) -> "> 7 j"
+local function sellDuration(s)
+    if s < 3600 then return "< 1 h" end
+    if s < 86400 then return string.format("~%d h", math.floor(s / 3600 + 0.5)) end
+    if s <= 7 * 86400 then return string.format("~%d j", math.floor(s / 86400 + 0.5)) end
+    return "> 7 j"
+end
+
+-- Time to sell from r.selling (Market.Report): the lowest price only (tooltip), or the three prices one per line,
+-- indented under "Vendu en :" (window, all); greyed while the estimated sales are not reliable. nil without it.
+function GM.SellText(r, all)
+    local s = r.selling
+    if not s then return nil end
+    local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
+    local function line(i) return GM.Money(s[i].price) .. c .. "  " .. sellDuration(s[i].seconds) .. "|r" end
+    if not all then return line(1) end
+    local lines = {}
+    for i = 1, #s do lines[i] = "    - " .. line(i) end
+    return table.concat(lines, "\n")
 end
 
 -- r: a Market.Report; sep: between the verdict and the estimated sales, "  " by default (tooltip), a line break in
@@ -66,7 +91,7 @@ end
 ---------------------------------------------------------------- window
 local W, H, SPAN = 340, 120, 21
 local f = CreateFrame("Frame", "VepIndustriesMarketTrendFrame", UIParent, "BackdropTemplate")
-f:SetSize(W + 30, H + 168) -- 3 lines of verdict above the graph
+f:SetSize(W + 30, H + 224) -- up to 7 lines of verdict above the graph
 f:SetPoint("CENTER", 300, 100)
 f:SetFrameStrata("DIALOG")
 f:SetBackdrop({
@@ -104,7 +129,7 @@ hintFS:SetPoint("BOTTOMLEFT", 14, 8)
 hintFS:SetText("Survole un objet.  /vim item <lien> pour figer, /vim unpin")
 
 local graph = CreateFrame("Frame", nil, f)
-graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -114)
+graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -170)
 local gbg = graph:CreateTexture(nil, "BACKGROUND"); gbg:SetAllPoints(); gbg:SetColorTexture(1, 1, 1, 0.04)
 local maxPFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); maxPFS:SetPoint("BOTTOMLEFT", graph,
     "TOPLEFT", 0, 2)
@@ -168,17 +193,19 @@ local function hideAll()
     for _, t in ipairs(dots) do t:Hide() end
 end
 
--- 123456 -> "12|cffffd700g|r 34|cffc7c7cfs|r 56|cffeda55fc|r" (GetCoinTextureString is missing on Forever)
-local function money(c)
+-- 123456 -> "12<gold icon> 34<silver icon> 56<copper icon>": the game's coin icons, which Auctionator uses on Forever
+-- too (GetCoinTextureString is missing there); letters read as units of time next to "~2 h"
+function GM.Money(c)
     if not c then return "?" end
     c = math.floor(c)
     local g, s, cu = math.floor(c / 10000), math.floor(c / 100) % 100, c % 100
     local out = {}
-    if g > 0 then out[#out + 1] = g .. hex(COIN.g) .. "g|r" end
-    if s > 0 or g > 0 then out[#out + 1] = s .. hex(COIN.s) .. "s|r" end
-    if cu > 0 or #out == 0 then out[#out + 1] = cu .. hex(COIN.c) .. "c|r" end
+    if g > 0 then out[#out + 1] = g .. COIN_ICON.g end
+    if s > 0 or g > 0 then out[#out + 1] = s .. COIN_ICON.s end
+    if cu > 0 or #out == 0 then out[#out + 1] = cu .. COIN_ICON.c end
     return table.concat(out, " ")
 end
+local money = GM.Money
 
 -- hovering a day lists its values: view = { first = Auctionator day of column 1, hist = { [day] = entry }, daily }
 local view = { hist = {}, daily = {} }
@@ -235,8 +262,10 @@ function GM.ShowItem(itemID, force)
     end
     emptyFS:Hide()
     local last = hist[#hist]
+    local sell = GM.SellText(r, true)
     verdictFS:SetText(GM.TrendText(r, "\n") .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
-        "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?"))
+        "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?")
+        .. (sell and "\n" .. hex(TEXT.bright) .. "Vendu en :|r\n" .. sell or ""))
 
     local pts, maxP, minP, maxS = {}, 0, math.huge, 0
     for _, e in ipairs(hist) do
@@ -311,6 +340,8 @@ local function onItemTooltip(tooltip, itemID)
     if #r.history > 0 or r.source == "sales" then
         tooltip:AddDoubleLine(hex(TITLE) .. (r.source == "sales" and "Ventes estimées " or "Tendance ") .. M.WINDOW
             .. " j|r", GM.TrendText(r))
+        local sell = GM.SellText(r)
+        if sell then tooltip:AddDoubleLine(hex(TITLE) .. "Vendu en|r", sell) end
     end
     if f:IsShown() and tooltip == GameTooltip then GM.ShowItem(itemID) end
 end
