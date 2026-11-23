@@ -112,12 +112,32 @@ local function texture()
 end
 CreateFrame = function(kind, name)
   local f = stub(name or kind)
+  rawset(f, "frameName", name)
   f.CreateTexture = texture
   local shown = false
   f.IsShown = function() return shown end
   f.Show = function() shown = true end
   f.Hide = function() shown = false end
   f.SetScript = function(self, script, fn) rawset(self, script, fn) end
+  f.SetSize = function(self, w, h) self.width, self.height = w, h end
+  -- font strings measuring their text: 6 px per visible character, 14 px per line
+  f.CreateFontString = function()
+    local fs = stub("fontstring")
+    fs.SetText = function(self, s) self.text = s end
+    local function lines(self)
+      local visible = (self.text or ""):gsub("|T[^|]*|t", "xx"):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+      local t = {}
+      for l in (visible .. "\n"):gmatch("(.-)\n") do t[#t + 1] = l end
+      return t
+    end
+    fs.GetStringWidth = function(self)
+      local w = 0
+      for _, l in ipairs(lines(self)) do w = math.max(w, utf8 and utf8.len(l) or #l) end
+      return w * 6
+    end
+    fs.GetStringHeight = function(self) return #lines(self) * 14 end
+    return fs
+  end
   local events = {}
   f.RegisterEvent = function(_, e) events[e] = true end
   f.UnregisterEvent = function(_, e) events[e] = nil end
