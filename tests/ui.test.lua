@@ -44,6 +44,9 @@ local busy = VepIndustriesMarket.TrendText({ verdict = "demand", trend = {}, est
 ok(busy:find("|cffffffff · ≈ 810g/jour|r", 1, true), "infobulle : valeur vendue par jour en or, fiable " .. busy)
 local small = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 30, goldPerDay = 4500 })
 ok(small:find("|cff9d9d9d · ≈ 45s/jour|r", 1, true), "infobulle : sous 1g en argent, grisee si non fiable " .. small)
+local twoLines = VepIndustriesMarket.TrendText({ verdict = "demand", trend = {}, estimatedSalesPerDay = 18000,
+  goldPerDay = 18000 * 450, confidence = "high" }, "\n")
+ok(twoLines:find("|r\n|cffffffff≈ 18000/jour|r", 1, true), "fenetre : ventes estimees sur leur propre ligne " .. twoLines)
 local none = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 0, goldPerDay = 0,
   scarce = true })
 ok(not none:find("/jour", 1, true), "infobulle : pas de valeur vendue sous pas assez de scans " .. none)

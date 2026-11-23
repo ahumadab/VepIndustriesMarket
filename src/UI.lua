@@ -39,8 +39,10 @@ local function roughMoney(c)
     return string.format("%ds", math.floor(c / 100 + 0.5))
 end
 
--- r: a Market.Report
-function GM.TrendText(r)
+-- r: a Market.Report; sep: between the verdict and the estimated sales, "  " by default (tooltip), a line break in
+-- the window, too narrow for both on one line
+function GM.TrendText(r, sep)
+    sep = sep or "  "
     local v, trend = r.verdict, r.trend
     local txt = hex(COLOR[v]) .. LABEL[v] .. "|r"
     local sales = r.source == "sales"
@@ -52,10 +54,10 @@ function GM.TrendText(r)
     txt = txt .. string.format(" %s(%d j)|r", hex(TEXT.muted), (sales and r.estimatedSalesDays or trend.days) or 0)
     local perDay = r.estimatedSalesPerDay
     if r.scarce then -- a few minutes compared: "0/jour" would read as "does not sell"
-        txt = txt .. "  " .. hex(TEXT.muted) .. "pas assez de scans|r"
+        txt = txt .. sep .. hex(TEXT.muted) .. "pas assez de scans|r"
     elseif perDay then -- grey while not reliable
         local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
-        txt = txt .. "  " .. c .. "≈ " .. perDayText(perDay) .. "/jour|r"
+        txt = txt .. sep .. c .. "≈ " .. perDayText(perDay) .. "/jour|r"
         if r.goldPerDay then txt = txt .. c .. " · ≈ " .. roughMoney(r.goldPerDay) .. "/jour|r" end
     end
     return txt
@@ -64,7 +66,7 @@ end
 ---------------------------------------------------------------- window
 local W, H, SPAN = 340, 120, 21
 local f = CreateFrame("Frame", "VepIndustriesMarketTrendFrame", UIParent, "BackdropTemplate")
-f:SetSize(W + 30, H + 154)
+f:SetSize(W + 30, H + 168) -- 3 lines of verdict above the graph
 f:SetPoint("CENTER", 300, 100)
 f:SetFrameStrata("DIALOG")
 f:SetBackdrop({
@@ -102,7 +104,7 @@ hintFS:SetPoint("BOTTOMLEFT", 14, 8)
 hintFS:SetText("Survole un objet.  /vim item <lien> pour figer, /vim unpin")
 
 local graph = CreateFrame("Frame", nil, f)
-graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -100)
+graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -114)
 local gbg = graph:CreateTexture(nil, "BACKGROUND"); gbg:SetAllPoints(); gbg:SetColorTexture(1, 1, 1, 0.04)
 local maxPFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); maxPFS:SetPoint("BOTTOMLEFT", graph,
     "TOPLEFT", 0, 2)
@@ -233,7 +235,7 @@ function GM.ShowItem(itemID, force)
     end
     emptyFS:Hide()
     local last = hist[#hist]
-    verdictFS:SetText(GM.TrendText(r) .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
+    verdictFS:SetText(GM.TrendText(r, "\n") .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
         "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?"))
 
     local pts, maxP, minP, maxS = {}, 0, math.huge, 0
