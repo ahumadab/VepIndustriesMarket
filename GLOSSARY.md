@@ -63,6 +63,11 @@ Nombre d'unités d'un objet probablement achetées entre deux scans complets, d�
 _Avoid_: Sale rate, ventes, demande
 _Code_: `estimatedSales` (`estimatedSalesPerDay` ramené à un jour)
 
+**Valeur vendue par jour**:
+Or qui passe chaque jour sur un objet, tous vendeurs confondus : ventes estimées par jour × prix minimum actuel. Un seul chiffre comparable d'un objet à l'autre, pour savoir où va l'argent (un objet cher peu vendu peut peser moins qu'un objet bon marché très vendu).
+_Avoid_: Chiffre d'affaires, volume, CA
+_Code_: `goldPerDay` (cuivre)
+
 **Fiable**:
 Se dit des ventes estimées d'un objet quand au moins deux jours de la fenêtre ont une comparaison de scans complets (donc au moins trois scans) et qu'elles portent sur au moins une heure, et d'un jour quand il est dans la fenêtre d'un objet fiable. Non fiables, elles sont grisées et le verdict se fonde sur la tendance ; sous une heure comparée (sur la fenêtre, ou sur un jour), l'addon affiche « pas assez de scans » au lieu d'un nombre.
 _Avoid_: Sûr, confiance (sauf dans le code)

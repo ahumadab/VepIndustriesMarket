@@ -454,7 +454,8 @@ local function dailyOf(db, id)
 end
 
 -- { verdict, source, trend = { price, stock, days, age }, estimatedSalesPerDay, estimatedSalesDays (compared days in
--- the window), estimatedSalesSeconds (compared time in the window), scarce, confidence, history, today, tiers, daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
+-- the window), estimatedSalesSeconds (compared time in the window), scarce, goldPerDay (copper: estimatedSalesPerDay x
+-- the lowest price of the latest full scan, nil without either), confidence, history, today, tiers, daily }. verdict from the estimated sales when their confidence is "high" (source "sales"), from the trend otherwise
 -- (source "trend"); the stock they are set against is the item's in the latest full scan, 0 when absent.
 -- price/stock: relative change of the latest day vs the median of the window; history: ascending { day, price, stock }
 -- tiers: the item in the latest full scan, by price, lot size, time left; daily: { [day] = { price, stock, scans,
@@ -497,6 +498,7 @@ function M.Report(itemID)
         estimatedSalesPerDay = perDay,
         estimatedSalesDays = days,
         estimatedSalesSeconds = seconds,
+        goldPerDay = perDay and tiers[1] and perDay * tiers[1].price or nil,
         scarce = scarce,
         confidence = perDay and (reliable and "high" or "low") or nil,
         history = hist,

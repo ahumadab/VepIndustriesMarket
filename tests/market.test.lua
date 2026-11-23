@@ -125,6 +125,8 @@ M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3,
 ok(near(rate(917), 72), "enchere Medium disparue en 20 min : vendue")
 ok(near(rate(910), 36) and M.Report(910).confidence == "high" and not M.Report(910).scarce,
   "2 jours, 3 scans compares : 2 vendues en 80 min, fiable")
+ok(near(M.Report(910).goldPerDay, 36 * 100), "valeur vendue par jour : ventes par jour x prix minimum actuel")
+ok(M.Report(999999).goldPerDay == nil, "objet sans ventes estimees : pas de valeur vendue")
 M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3 + 1800, "PvE", "Horde", "Boris")
 ok(near(rate(910), 36) and M.Status().time == t3, "meme scan relu : pas compare, garde son heure")
 M.Ingest({}, t3 + 2000, "PvE", "Horde", "Boris")

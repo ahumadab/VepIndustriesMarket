@@ -33,6 +33,12 @@ local function perDayText(perDay)
         string.format("%d", math.floor(perDay + 0.5))
 end
 
+-- 8100000 copper -> "810g", 4500 -> "45s": an order of magnitude, plain (no coin colour, so it greys with its line)
+local function roughMoney(c)
+    if c >= 10000 then return string.format("%dg", math.floor(c / 10000 + 0.5)) end
+    return string.format("%ds", math.floor(c / 100 + 0.5))
+end
+
 -- r: a Market.Report
 function GM.TrendText(r)
     local v, trend = r.verdict, r.trend
@@ -48,8 +54,9 @@ function GM.TrendText(r)
     if r.scarce then -- a few minutes compared: "0/jour" would read as "does not sell"
         txt = txt .. "  " .. hex(TEXT.muted) .. "pas assez de scans|r"
     elseif perDay then -- grey while not reliable
-        txt = txt .. "  " .. hex(r.confidence == "high" and TEXT.bright or TEXT.muted) .. "≈ " .. perDayText(perDay)
-            .. "/jour|r"
+        local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
+        txt = txt .. "  " .. c .. "≈ " .. perDayText(perDay) .. "/jour|r"
+        if r.goldPerDay then txt = txt .. c .. " · ≈ " .. roughMoney(r.goldPerDay) .. "/jour|r" end
     end
     return txt
 end

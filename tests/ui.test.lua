@@ -39,6 +39,14 @@ ok(lines[4] and lines[4]:find("^|cffffd100Ventes estimées 7 j|r || |cff4cff4cDe
 VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily, VepIndustriesMarketDB.comparisons = nil, nil, nil
 local slow = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 2.5 })
 ok(slow:find("≈ 2,5/jour", 1, true), "infobulle : decimale sous 10/jour " .. slow)
+local busy = VepIndustriesMarket.TrendText({ verdict = "demand", trend = {}, estimatedSalesPerDay = 18000,
+  goldPerDay = 18000 * 450, confidence = "high" })
+ok(busy:find("|cffffffff · ≈ 810g/jour|r", 1, true), "infobulle : valeur vendue par jour en or, fiable " .. busy)
+local small = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 30, goldPerDay = 4500 })
+ok(small:find("|cff9d9d9d · ≈ 45s/jour|r", 1, true), "infobulle : sous 1g en argent, grisee si non fiable " .. small)
+local none = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 0, goldPerDay = 0,
+  scarce = true })
+ok(not none:find("/jour", 1, true), "infobulle : pas de valeur vendue sous pas assez de scans " .. none)
 local scarce = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 0, scarce = true })
 ok(scarce:find("pas assez de scans", 1, true) and not scarce:find("≈", 1, true),
   "infobulle : moins d'une heure comparee -> pas assez de scans, pas de 0/jour " .. scarce)
