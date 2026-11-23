@@ -51,17 +51,17 @@ local function sellDuration(s)
     return "> 7 j"
 end
 
--- Time to sell from r.selling (Market.Report): the lowest price only (tooltip), or the three prices (window, all);
--- greyed while the estimated sales are not reliable. nil without it.
+-- Time to sell from r.selling (Market.Report): the lowest price only (tooltip), or the three prices one per line,
+-- indented under "Vendu en :" (window, all); greyed while the estimated sales are not reliable. nil without it.
 function GM.SellText(r, all)
     local s = r.selling
     if not s then return nil end
     local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
-    local parts = {}
-    for i = 1, all and #s or 1 do
-        parts[#parts + 1] = GM.Money(s[i].price, true) .. c .. " : " .. sellDuration(s[i].seconds) .. "|r"
-    end
-    return table.concat(parts, c .. " · |r")
+    local function line(i) return GM.Money(s[i].price) .. c .. "  " .. sellDuration(s[i].seconds) .. "|r" end
+    if not all then return line(1) end
+    local lines = {}
+    for i = 1, #s do lines[i] = "    - " .. line(i) end
+    return table.concat(lines, "\n")
 end
 
 -- r: a Market.Report; sep: between the verdict and the estimated sales, "  " by default (tooltip), a line break in
@@ -89,9 +89,9 @@ function GM.TrendText(r, sep)
 end
 
 ---------------------------------------------------------------- window
-local W, H, SPAN = 420, 120, 21 -- wide enough for the three prices of "Vendu en"
+local W, H, SPAN = 340, 120, 21
 local f = CreateFrame("Frame", "VepIndustriesMarketTrendFrame", UIParent, "BackdropTemplate")
-f:SetSize(W + 30, H + 182) -- 4 lines of verdict above the graph
+f:SetSize(W + 30, H + 224) -- up to 7 lines of verdict above the graph
 f:SetPoint("CENTER", 300, 100)
 f:SetFrameStrata("DIALOG")
 f:SetBackdrop({
@@ -129,7 +129,7 @@ hintFS:SetPoint("BOTTOMLEFT", 14, 8)
 hintFS:SetText("Survole un objet.  /vim item <lien> pour figer, /vim unpin")
 
 local graph = CreateFrame("Frame", nil, f)
-graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -128)
+graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -170)
 local gbg = graph:CreateTexture(nil, "BACKGROUND"); gbg:SetAllPoints(); gbg:SetColorTexture(1, 1, 1, 0.04)
 local maxPFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); maxPFS:SetPoint("BOTTOMLEFT", graph,
     "TOPLEFT", 0, 2)
@@ -195,15 +195,14 @@ end
 
 -- 123456 -> "12<gold icon> 34<silver icon> 56<copper icon>": the game's coin icons, which Auctionator uses on Forever
 -- too (GetCoinTextureString is missing there); letters read as units of time next to "~2 h"
--- short: no copper once there is gold (an order of magnitude, for the three prices of "Vendu en")
-function GM.Money(c, short)
+function GM.Money(c)
     if not c then return "?" end
     c = math.floor(c)
     local g, s, cu = math.floor(c / 10000), math.floor(c / 100) % 100, c % 100
     local out = {}
     if g > 0 then out[#out + 1] = g .. COIN_ICON.g end
     if s > 0 or g > 0 then out[#out + 1] = s .. COIN_ICON.s end
-    if (cu > 0 and not (short and g > 0)) or #out == 0 then out[#out + 1] = cu .. COIN_ICON.c end
+    if cu > 0 or #out == 0 then out[#out + 1] = cu .. COIN_ICON.c end
     return table.concat(out, " ")
 end
 local money = GM.Money
@@ -266,7 +265,7 @@ function GM.ShowItem(itemID, force)
     local sell = GM.SellText(r, true)
     verdictFS:SetText(GM.TrendText(r, "\n") .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
         "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?")
-        .. (sell and "\n" .. hex(TEXT.bright) .. "Vendu en|r " .. sell or ""))
+        .. (sell and "\n" .. hex(TEXT.bright) .. "Vendu en :|r\n" .. sell or ""))
 
     local pts, maxP, minP, maxS = {}, 0, math.huge, 0
     for _, e in ipairs(hist) do

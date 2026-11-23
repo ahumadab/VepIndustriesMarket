@@ -34,8 +34,8 @@ ok(lines[4]:find("|cffffffff≈ 54/jour|r", 1, true), "infobulle : ventes estime
 ok(lines[2]:find("^|cffffd100Tendance 7 j|r") and lines[4]:find("^|cffffd100Ventes estimées 7 j|r")
   and lines[4]:find("(2 j)", 1, true), "infobulle : source du verdict et jours de ventes estimees " .. lines[4])
 local COPPER = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t"
-ok(lines[3]:find("|cffffd100Vendu en|r || 99" .. COPPER .. "|cff9d9d9d : ", 1, true) and lines[5]
-  and lines[5]:find("|cffffd100Vendu en|r || 99" .. COPPER .. "|cffffffff : ", 1, true) ~= nil,
+ok(lines[3]:find("|cffffd100Vendu en|r || 99" .. COPPER .. "|cff9d9d9d  ", 1, true) and lines[5]
+  and lines[5]:find("|cffffd100Vendu en|r || 99" .. COPPER .. "|cffffffff  ", 1, true) ~= nil,
   "infobulle : temps pour vendre sous la ligne du verdict, grise puis fiable " .. tostring(lines[5]))
 postCall(tip, { id = 933 })
 ok(lines[6] and lines[6]:find("^|cffffd100Ventes estimées 7 j|r || |cff4cff4cDemande|r |cff9d9d9d%(2 j%)|r"),
@@ -58,9 +58,7 @@ ok(tipSell and tipSell:find("< 1 h", 1, true) and not tipSell:find("~3 h", 1, tr
 local winSell = VepIndustriesMarket.SellText({ selling = selling, confidence = "low" }, true)
 ok(winSell and winSell:find("< 1 h", 1, true) and winSell:find("~3 h", 1, true) and winSell:find("> 7 j", 1, true)
   and winSell:find("|cff9d9d9d", 1, true), "fenetre : trois prix, grises si non fiable " .. tostring(winSell))
-ok(VepIndustriesMarket.Money(123456, true) == "12|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t 34|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t"
-  and VepIndustriesMarket.Money(4549, true):find("49|TInterface\\MoneyFrame\\UI-CopperIcon", 1, true) ~= nil,
-  "prix courts : sans cuivre des qu'il y a de l'or")
+ok(select(2, winSell:gsub("\n", "")) == 2 and winSell:sub(1, 6) == "    - ", "fenetre : un prix par ligne, indente")
 ok(VepIndustriesMarket.SellText({}) == nil, "sans temps pour vendre : rien")
 local none = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 0, goldPerDay = 0,
   scarce = true })
