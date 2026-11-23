@@ -43,6 +43,13 @@ local function roughMoney(c)
     return string.format("%d", math.floor(c / 100 + 0.5)) .. COIN_ICON.s
 end
 
+-- the estimated sales and gold per day alone, as in TrendText (tooltip, under the advice)
+function GM.SalesText(r)
+    local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
+    return c .. "≈ " .. perDayText(r.estimatedSalesPerDay or 0) .. "/jour|r"
+        .. (r.goldPerDay and c .. " · ≈ " .. roughMoney(r.goldPerDay) .. "/jour|r" or "")
+end
+
 -- 600 -> "< 1 h", 3 h -> "~3 h", 2 days -> "~2 j", beyond a week (or no sale measured) -> "> 7 j"
 local function sellDuration(s)
     if s < 3600 then return "< 1 h" end
@@ -62,6 +69,37 @@ function GM.SellText(r, all)
     local lines = {}
     for i = 1, #s do lines[i] = "    - " .. line(i) end
     return table.concat(lines, "\n")
+end
+
+-- the longest a seller is advised to wait: a 12 h auction
+local ADVICE_WAIT = 12 * 3600
+
+-- One sentence for a player who doesn't read figures (r: a Market.Report): the verdict, the price to sell at (the
+-- highest of r.selling that sells within ADVICE_WAIT, else just under the lowest), how long it takes, and, while the
+-- estimated sales are not reliable, how many hours of scans it rests on.
+function GM.AdviceText(r)
+    local s = r.selling
+    if not s then return hex(TEXT.muted) .. "Pas encore assez de scans pour conseiller|r" end
+    local txt
+    if r.verdict == "saturated" then
+        local stock = 0
+        for _, t in ipairs(r.tiers or {}) do stock = stock + t.size * t.count end
+        local perDay = r.estimatedSalesPerDay or 0
+        txt = hex(COLOR.saturated) .. "Marché saturé|r : " .. (perDay > 0
+            and sellDuration(stock / perDay * 86400) .. " de stock devant toi, attends ou vends moins cher"
+            or "rien ne se vend, attends ou vends ailleurs")
+    else
+        local pick = s[1]
+        for i = 2, #s do if s[i].seconds <= ADVICE_WAIT then pick = s[i] end end
+        local head = r.verdict == "demand" and hex(COLOR.demand) .. "Bonne vente|r"
+            or r.verdict == "stable" and hex(COLOR.stable) .. "Vente correcte|r" or "À tester"
+        txt = head .. " : vends à " .. GM.Money(pick.price) .. ", parti en " .. sellDuration(pick.seconds)
+    end
+    if r.confidence ~= "high" then
+        txt = txt .. " " .. hex(TEXT.muted) .. string.format("(%d h de mesures, à confirmer)|r",
+            math.floor((r.estimatedSalesSeconds or 0) / 3600 + 0.5))
+    end
+    return txt
 end
 
 -- r: a Market.Report; sep: between the verdict and the estimated sales, "  " by default (tooltip), a line break in
@@ -91,7 +129,7 @@ end
 ---------------------------------------------------------------- window
 local W, H, SPAN = 340, 120, 21
 local f = CreateFrame("Frame", "VepIndustriesMarketTrendFrame", UIParent, "BackdropTemplate")
-f:SetSize(W + 30, H + 224) -- up to 7 lines of verdict above the graph
+f:SetSize(W + 30, H + 238) -- up to 8 lines of verdict above the graph
 f:SetPoint("CENTER", 300, 100)
 f:SetFrameStrata("DIALOG")
 f:SetBackdrop({
@@ -129,7 +167,7 @@ hintFS:SetPoint("BOTTOMLEFT", 14, 8)
 hintFS:SetText("Survole un objet.  /vim item <lien> pour figer, /vim unpin")
 
 local graph = CreateFrame("Frame", nil, f)
-graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -170)
+graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -184)
 local gbg = graph:CreateTexture(nil, "BACKGROUND"); gbg:SetAllPoints(); gbg:SetColorTexture(1, 1, 1, 0.04)
 local maxPFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); maxPFS:SetPoint("BOTTOMLEFT", graph,
     "TOPLEFT", 0, 2)
@@ -263,7 +301,7 @@ function GM.ShowItem(itemID, force)
     emptyFS:Hide()
     local last = hist[#hist]
     local sell = GM.SellText(r, true)
-    verdictFS:SetText(GM.TrendText(r, "\n") .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
+    verdictFS:SetText(GM.AdviceText(r) .. "\n" .. GM.TrendText(r, "\n") .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
         "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?")
         .. (sell and "\n" .. hex(TEXT.bright) .. "Vendu en :|r\n" .. sell or ""))
 
@@ -338,10 +376,10 @@ local function onItemTooltip(tooltip, itemID)
     if VepIndustriesMarketDB and VepIndustriesMarketDB.tooltip == false then return end
     local r = M.Report(itemID)
     if #r.history > 0 or r.source == "sales" then
+        -- the advice first; with it, the sales figures alone (the trend's percentages stay in the /vim window)
+        tooltip:AddDoubleLine(hex(TITLE) .. "Conseil|r", GM.AdviceText(r))
         tooltip:AddDoubleLine(hex(TITLE) .. (r.source == "sales" and "Ventes estimées " or "Tendance ") .. M.WINDOW
-            .. " j|r", GM.TrendText(r))
-        local sell = GM.SellText(r)
-        if sell then tooltip:AddDoubleLine(hex(TITLE) .. "Vendu en|r", sell) end
+            .. " j|r", r.selling and GM.SalesText(r) or GM.TrendText(r))
     end
     if f:IsShown() and tooltip == GameTooltip then GM.ShowItem(itemID) end
 end

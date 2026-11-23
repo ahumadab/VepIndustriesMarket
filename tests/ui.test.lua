@@ -14,32 +14,37 @@ local lines = {}
 local tip = GameTooltip
 tip.AddDoubleLine = function(_, a, b) lines[#lines + 1] = a .. " || " .. b end
 tip.AddLine = function(_, a) lines[#lines + 1] = a end
-local okTip, e2 = pcall(postCall, tip, { id = 14048 })
-ok(okTip and lines[1] == "|cffffd100Tendance 7 j|r || |cffff5959Saturé|r  prix |cff66ff66+8%|r  stock "
-  .. "|cffff6666+190%|r |cff9d9d9d(2 j)|r", "ligne infobulle " .. tostring(e2) .. " " .. tostring(lines[1]))
-local okNone = pcall(postCall, tip, { id = 999999 })
-ok(okNone and #lines == 1, "pas de ligne infobulle pour un objet absent")
+-- each tooltip: "Conseil" (the advice) then the trend line, or the sales figures alone once there is a time to sell
+local function tooltipOf(id)
+  for k in pairs(lines) do lines[k] = nil end
+  local okCall, e = pcall(postCall, tip, { id = id })
+  return okCall and lines or { tostring(e) }
+end
+local t1 = tooltipOf(14048)
+ok(t1[1] == "|cffffd100Conseil|r || |cff9d9d9dPas encore assez de scans pour conseiller|r"
+  and t1[2] == "|cffffd100Tendance 7 j|r || |cffff5959Saturé|r  prix |cff66ff66+8%|r  stock "
+  .. "|cffff6666+190%|r |cff9d9d9d(2 j)|r", "infobulle sans ventes : conseil d'attendre, ligne de tendance " .. tostring(t1[2]))
+ok(#tooltipOf(999999) == 0, "pas de ligne infobulle pour un objet absent")
 -- 933: no Auctionator history, sells 1 of 5 then 1 of 4
 M.Ingest({ [4338] = { tier(100, 1, 9, 3) }, [933] = { tier(100, 1, 5, 3) } }, t0, "PvE", "Horde", "Boris")
 M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [933] = { tier(100, 1, 4, 3) } }, t0 + 3600, "PvE", "Horde", "Boris")
-postCall(tip, { id = 4338 })
-ok(lines[2]:find("|cff9d9d9d≈ 72/jour|r", 1, true), "infobulle : ventes estimees grisees sous le seuil " .. lines[2])
+local t2l = tooltipOf(4338)
+ok(t2l[1]:find("^|cffffd100Conseil|r") and t2l[1]:find("à confirmer", 1, true)
+  and t2l[2]:find("^|cffffd100Tendance 7 j|r || |cff9d9d9d≈ 72/jour|r"),
+  "infobulle : conseil a confirmer, ventes estimees grisees sous le seuil " .. t2l[1] .. " / " .. t2l[2])
 M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [933] = { tier(100, 1, 4, 3) }, [997] = { tier(1, 1, 1, 3) } }, t2,
   "PvE", "Horde", "Boris")
 M.Ingest({ [4338] = { tier(100, 1, 6, 3) }, [933] = { tier(100, 1, 3, 3) }, [998] = { tier(1, 1, 1, 3) } }, t3,
   "PvE", "Horde", "Boris")
-postCall(tip, { id = 4338 })
-ok(lines[4]:find("|cffffffff≈ 54/jour|r", 1, true), "infobulle : ventes estimees fiables " .. lines[4])
+local t3l = tooltipOf(4338)
 -- label colour: TITLE in src/UI.lua
-ok(lines[2]:find("^|cffffd100Tendance 7 j|r") and lines[4]:find("^|cffffd100Ventes estimées 7 j|r")
-  and lines[4]:find("(2 j)", 1, true), "infobulle : source du verdict et jours de ventes estimees " .. lines[4])
-local COPPER = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t"
-ok(lines[3]:find("|cffffd100Vendu en|r || 99" .. COPPER .. "|cff9d9d9d  ", 1, true) and lines[5]
-  and lines[5]:find("|cffffd100Vendu en|r || 99" .. COPPER .. "|cffffffff  ", 1, true) ~= nil,
-  "infobulle : temps pour vendre sous la ligne du verdict, grise puis fiable " .. tostring(lines[5]))
-postCall(tip, { id = 933 })
-ok(lines[6] and lines[6]:find("^|cffffd100Ventes estimées 7 j|r || |cff4cff4cDemande|r |cff9d9d9d%(2 j%)|r"),
-  "infobulle : verdict des ventes sans historique Auctionator, sans tendance " .. tostring(lines[6]))
+ok(t3l[1]:find("^|cffffd100Conseil|r || ") and not t3l[1]:find("confirmer", 1, true)
+  and t3l[2] == "|cffffd100Ventes estimées 7 j|r || |cffffffff≈ 54/jour|r|cffffffff · ≈ 54"
+  .. "|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t/jour|r",
+  "infobulle : conseil fiable, puis ventes estimees seules " .. t3l[1] .. " / " .. t3l[2])
+local t4 = tooltipOf(933)
+ok(t4[2] and t4[2]:find("^|cffffd100Ventes estimées 7 j|r || |cffffffff≈ "),
+  "infobulle : ventes estimees sans historique Auctionator " .. tostring(t4[2]))
 VepIndustriesMarketDB.fullScan, VepIndustriesMarketDB.daily, VepIndustriesMarketDB.comparisons = nil, nil, nil
 local slow = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 2.5 })
 ok(slow:find("≈ 2,5/jour", 1, true), "infobulle : decimale sous 10/jour " .. slow)
@@ -59,6 +64,28 @@ local winSell = VepIndustriesMarket.SellText({ selling = selling, confidence = "
 ok(winSell and winSell:find("< 1 h", 1, true) and winSell:find("~3 h", 1, true) and winSell:find("> 7 j", 1, true)
   and winSell:find("|cff9d9d9d", 1, true), "fenetre : trois prix, grises si non fiable " .. tostring(winSell))
 ok(select(2, winSell:gsub("\n", "")) == 2 and winSell:sub(1, 6) == "    - ", "fenetre : un prix par ligne, indente")
+-- advice sentence (VepIndustriesMarket.AdviceText): one case each
+local A = VepIndustriesMarket.AdviceText
+local fast = { { price = 449, ahead = 0, seconds = 600 }, { price = 472, ahead = 700, seconds = 2 * 3600 },
+  { price = 495, ahead = 4200, seconds = 11 * 3600 } }
+local slow3 = { { price = 197, ahead = 0, seconds = 600 }, { price = 207, ahead = 14000, seconds = 36 * 3600 },
+  { price = 217, ahead = 15000, seconds = 40 * 3600 } }
+local demand = A({ verdict = "demand", selling = fast, confidence = "high", estimatedSalesPerDay = 18000 })
+ok(demand:find("Bonne vente", 1, true) and demand:find("vends à 4", 1, true) and demand:find("95", 1, true)
+  and demand:find("parti en ~11 h", 1, true) and not demand:find("confirmer", 1, true),
+  "conseil demande : le prix le plus haut qui part en 12 h " .. demand)
+local stable = A({ verdict = "stable", selling = slow3, confidence = "high", estimatedSalesPerDay = 1500 })
+ok(stable:find("Vente correcte", 1, true) and stable:find("parti en < 1 h", 1, true),
+  "conseil stable : au plus bas quand +5 % attend plus de 12 h " .. stable)
+local sat = A({ verdict = "saturated", selling = slow3, confidence = "high", estimatedSalesPerDay = 1000,
+  tiers = { { price = 197, size = 20, count = 450 } } })
+ok(sat:find("Marché saturé", 1, true) and sat:find("> 7 j de stock devant toi", 1, true),
+  "conseil sature : jours de stock " .. sat)
+local dead = A({ verdict = "saturated", selling = slow3, confidence = "high", estimatedSalesPerDay = 0, tiers = {} })
+ok(dead:find("rien ne se vend", 1, true), "conseil sature sans vente " .. dead)
+ok(A({ verdict = "demand", trend = {} }):find("Pas encore assez de scans", 1, true), "conseil sans temps pour vendre")
+local unsure = A({ verdict = "stable", selling = fast, confidence = "low", estimatedSalesSeconds = 5 * 3600 })
+ok(unsure:find("(5 h de mesures, à confirmer)", 1, true), "conseil non fiable : duree mesuree " .. unsure)
 ok(VepIndustriesMarket.SellText({}) == nil, "sans temps pour vendre : rien")
 local none = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 0, goldPerDay = 0,
   scarce = true })
