@@ -33,8 +33,9 @@ ok(lines[4]:find("|cffffffff≈ 54/jour|r", 1, true), "infobulle : ventes estime
 -- label colour: TITLE in src/UI.lua
 ok(lines[2]:find("^|cffffd100Tendance 7 j|r") and lines[4]:find("^|cffffd100Ventes estimées 7 j|r")
   and lines[4]:find("(2 j)", 1, true), "infobulle : source du verdict et jours de ventes estimees " .. lines[4])
-ok(lines[3]:find("^|cffffd100Vendu en|r || 99|cffeda55fc|r |cff9d9d9d") and lines[5]
-  and lines[5]:find("^|cffffd100Vendu en|r || 99|cffeda55fc|r |cffffffff") ~= nil,
+local COPPER = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t"
+ok(lines[3]:find("|cffffd100Vendu en|r || 99" .. COPPER .. "|cff9d9d9d : ", 1, true) and lines[5]
+  and lines[5]:find("|cffffd100Vendu en|r || 99" .. COPPER .. "|cffffffff : ", 1, true) ~= nil,
   "infobulle : temps pour vendre sous la ligne du verdict, grise puis fiable " .. tostring(lines[5]))
 postCall(tip, { id = 933 })
 ok(lines[6] and lines[6]:find("^|cffffd100Ventes estimées 7 j|r || |cff4cff4cDemande|r |cff9d9d9d%(2 j%)|r"),
@@ -44,9 +45,9 @@ local slow = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estim
 ok(slow:find("≈ 2,5/jour", 1, true), "infobulle : decimale sous 10/jour " .. slow)
 local busy = VepIndustriesMarket.TrendText({ verdict = "demand", trend = {}, estimatedSalesPerDay = 18000,
   goldPerDay = 18000 * 450, confidence = "high" })
-ok(busy:find("|cffffffff · ≈ 810g/jour|r", 1, true), "infobulle : valeur vendue par jour en or, fiable " .. busy)
+ok(busy:find("|cffffffff · ≈ 810|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t/jour|r", 1, true), "infobulle : valeur vendue par jour en or, fiable " .. busy)
 local small = VepIndustriesMarket.TrendText({ verdict = "none", trend = {}, estimatedSalesPerDay = 30, goldPerDay = 4500 })
-ok(small:find("|cff9d9d9d · ≈ 45s/jour|r", 1, true), "infobulle : sous 1g en argent, grisee si non fiable " .. small)
+ok(small:find("|cff9d9d9d · ≈ 45|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t/jour|r", 1, true), "infobulle : sous 1g en argent, grisee si non fiable " .. small)
 local twoLines = VepIndustriesMarket.TrendText({ verdict = "demand", trend = {}, estimatedSalesPerDay = 18000,
   goldPerDay = 18000 * 450, confidence = "high" }, "\n")
 ok(twoLines:find("|r\n|cffffffff≈ 18000/jour|r", 1, true), "fenetre : ventes estimees sur leur propre ligne " .. twoLines)
@@ -121,7 +122,7 @@ local function hover(daysAgo)
 end
 local yesterday, older, oldest, empty = hover(1), hover(3), hover(10), hover(20)
 ok(#columns == 21, "fenetre : une zone de survol par jour (" .. #columns .. ")")
-ok(yesterday:find("il y a 1 j", 1, true) and yesterday:find("Prix minimum || 90|cffeda55fc|r", 1, true)
+ok(yesterday:find("il y a 1 j", 1, true) and yesterday:find("Prix minimum || 90|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t", 1, true)
   and yesterday:find("Stock || 46558", 1, true) and yesterday:find("Ventes estimées || |cffffffff≈ ", 1, true),
   "survol d'hier : prix, stock et ventes estimees fiables\n" .. yesterday)
 ok(older:find("Ventes estimées", 1, true) and not older:find("Stock", 1, true),

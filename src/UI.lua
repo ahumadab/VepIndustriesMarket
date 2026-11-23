@@ -15,7 +15,11 @@ local TITLE = { 1.00, 0.82, 0.00 } -- tooltip label, the game's gold
 -- text only: muted (not reliable, day counts), bright (reliable values), a % change (neutral, good, bad), coins
 local TEXT = { muted = { 0.616, 0.616, 0.616 }, bright = { 1.00, 1.00, 1.00 }, neutral = { 0.80, 0.80, 0.80 },
     good = { 0.40, 1.00, 0.40 }, bad = { 1.00, 0.40, 0.40 } }
-local COIN = { g = { 1.00, 0.844, 0.00 }, s = { 0.781, 0.781, 0.812 }, c = { 0.93, 0.648, 0.373 } }
+local COIN_ICON = {
+    g = "|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t",
+    s = "|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t",
+    c = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t",
+}
 local function hex(c) return string.format("|cff%02x%02x%02x", math.floor(c[1] * 255), math.floor(c[2] * 255),
         math.floor(c[3] * 255)) end
 -- invert: for stock, more is bad for a seller (red)
@@ -33,10 +37,10 @@ local function perDayText(perDay)
         string.format("%d", math.floor(perDay + 0.5))
 end
 
--- 8100000 copper -> "810g", 4500 -> "45s": an order of magnitude, plain (no coin colour, so it greys with its line)
+-- 8100000 copper -> "810<gold icon>", 4500 -> "45<silver icon>": an order of magnitude
 local function roughMoney(c)
-    if c >= 10000 then return string.format("%dg", math.floor(c / 10000 + 0.5)) end
-    return string.format("%ds", math.floor(c / 100 + 0.5))
+    if c >= 10000 then return string.format("%d", math.floor(c / 10000 + 0.5)) .. COIN_ICON.g end
+    return string.format("%d", math.floor(c / 100 + 0.5)) .. COIN_ICON.s
 end
 
 -- 600 -> "< 1 h", 3 h -> "~3 h", 2 days -> "~2 j", beyond a week (or no sale measured) -> "> 7 j"
@@ -55,7 +59,7 @@ function GM.SellText(r, all)
     local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
     local parts = {}
     for i = 1, all and #s or 1 do
-        parts[#parts + 1] = GM.Money(s[i].price) .. " " .. c .. sellDuration(s[i].seconds) .. "|r"
+        parts[#parts + 1] = GM.Money(s[i].price) .. c .. " : " .. sellDuration(s[i].seconds) .. "|r"
     end
     return table.concat(parts, c .. " · |r")
 end
@@ -189,15 +193,16 @@ local function hideAll()
     for _, t in ipairs(dots) do t:Hide() end
 end
 
--- 123456 -> "12|cffffd700g|r 34|cffc7c7cfs|r 56|cffeda55fc|r" (GetCoinTextureString is missing on Forever)
+-- 123456 -> "12<gold icon> 34<silver icon> 56<copper icon>": the game's coin icons, which Auctionator uses on Forever
+-- too (GetCoinTextureString is missing there); letters read as units of time next to "~2 h"
 function GM.Money(c)
     if not c then return "?" end
     c = math.floor(c)
     local g, s, cu = math.floor(c / 10000), math.floor(c / 100) % 100, c % 100
     local out = {}
-    if g > 0 then out[#out + 1] = g .. hex(COIN.g) .. "g|r" end
-    if s > 0 or g > 0 then out[#out + 1] = s .. hex(COIN.s) .. "s|r" end
-    if cu > 0 or #out == 0 then out[#out + 1] = cu .. hex(COIN.c) .. "c|r" end
+    if g > 0 then out[#out + 1] = g .. COIN_ICON.g end
+    if s > 0 or g > 0 then out[#out + 1] = s .. COIN_ICON.s end
+    if cu > 0 or #out == 0 then out[#out + 1] = cu .. COIN_ICON.c end
     return table.concat(out, " ")
 end
 local money = GM.Money
