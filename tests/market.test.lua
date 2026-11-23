@@ -125,6 +125,8 @@ M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3,
 ok(near(rate(917), 72), "enchere Medium disparue en 20 min : vendue")
 ok(near(rate(910), 36) and M.Report(910).confidence == "high" and not M.Report(910).scarce,
   "2 jours, 3 scans compares : 2 vendues en 80 min, fiable")
+ok(near(M.Report(910).goldPerDay, 36 * 100), "valeur vendue par jour : ventes par jour x prix minimum actuel")
+ok(M.Report(999999).goldPerDay == nil, "objet sans ventes estimees : pas de valeur vendue")
 M.Ingest({ [910] = { tier(100, 1, 1, 3) }, [917] = { tier(100, 1, 1, 2) } }, t3 + 1800, "PvE", "Horde", "Boris")
 ok(near(rate(910), 36) and M.Status().time == t3, "meme scan relu : pas compare, garde son heure")
 M.Ingest({}, t3 + 2000, "PvE", "Horde", "Boris")
@@ -157,8 +159,25 @@ ok(said(M.Ingest({ [944] = { tier(100, 1, 1, 3) } }, t2 + 4 * 3600 + 1500, "PvE"
   == "false otherHouse nil", "autre hotel des ventes")
 ok(M.Ingest({}, t2 + 5 * 3600, "PvE", "Horde", "Boris") == nil, "scan vide : nil")
 local few = M.Report(944)
+ok(few.selling == nil, "pas assez de scans : pas de temps pour vendre")
 ok(few.scarce and few.estimatedSalesSeconds == 1500 and few.confidence == "low" and few.source == "trend"
   and few.daily[TODAY].scarce, "25 min comparees en tout : pas assez de scans, verdict de la tendance")
+
+-- time to sell at a price: the units cheaper or at that price in the latest full scan, plus one lot of the most common
+-- size, at the pace of the estimated sales (24 sold in 1 h here)
+VepIndustriesMarketDB = {}
+M.Ingest({ [945] = { tier(100, 1, 30, 3), tier(110, 1, 10, 3) } }, t2, "PvE", "Horde", "Boris")
+M.Ingest({ [945] = { tier(100, 1, 6, 3), tier(104, 1, 4, 3), tier(110, 1, 10, 3) } }, t2 + 3600, "PvE", "Horde", "Boris")
+local sell = M.Report(945).selling or {}
+ok(#sell == 3 and sell[1].price == 99 and sell[1].ahead == 0 and near(sell[1].seconds, 150)
+  and sell[2].price == 105 and sell[2].ahead == 10 and near(sell[2].seconds, 1650)
+  and sell[3].price == 110 and sell[3].ahead == 20 and near(sell[3].seconds, 3150),
+  "temps pour vendre : plus bas - 1c, +5 %, +10 %, file devant soi + un lot")
+VepIndustriesMarketDB = {}
+M.Ingest({ [946] = { tier(100, 20, 3, 3) } }, t2, "PvE", "Horde", "Boris")
+M.Ingest({ [946] = { tier(100, 20, 3, 3), tier(150, 20, 1, 3) } }, t2 + 3600, "PvE", "Horde", "Boris")
+sell = M.Report(946).selling or {}
+ok(sell[1] and sell[1].seconds == math.huge, "aucune vente mesuree : temps infini")
 
 -- a Comparison over midnight: its sales split between both days, prorata of the time on each
 VepIndustriesMarketDB = {}
@@ -292,13 +311,14 @@ local function realPair(before, after, t1, t2, ids)
 end
 -- the first scan's time is unknown: compared as if 1 h apart (Short and Medium may expire)
 local total, selling, of = realPair(FULLSCAN, FULLSCAN_1121_2023, FULLSCAN_1121_2023_TIME - 3600, FULLSCAN_1121_2023_TIME,
-  { 2512, 5479, 3858, 11083 })
-ok(total == 7165 and selling == 147 and of[1] == 0 and of[2] == 368 and of[3] == 1022 and of[4] == 863,
+  { 2512, 5479, 3858, 11083, 6042 })
+ok(total == 7191 and selling == 152 and of[1] == 0 and of[2] == 368 and of[3] == 1022 and of[4] == 863 and of[5] == 20,
   string.format("scans reels, 1 h : %d unites vendues sur %d objets (fleches grossieres 2512 : %d, stock en hausse)",
     total, selling, of[1]))
 -- consecutive autoscans 919 s apart (Short only may expire)
-total, selling, of = realPair(FULLSCAN_1121_2023, FULLSCAN_1121_2039, FULLSCAN_1121_2023_TIME, FULLSCAN_1121_2039_TIME, { 2512, 4306 })
-ok(total == 4227 and selling == 110 and of[1] == 0 and of[2] == 1315,
+total, selling, of = realPair(FULLSCAN_1121_2023, FULLSCAN_1121_2039, FULLSCAN_1121_2023_TIME, FULLSCAN_1121_2039_TIME,
+  { 2512, 4306, 3356, 2251 })
+ok(total == 4333 and selling == 117 and of[1] == 0 and of[2] == 1315 and of[3] == 16 and of[4] == 83,
   string.format("scans reels consecutifs, 919 s : %d unites vendues sur %d objets", total, selling))
 
 -- merge by Tranche: the cases shared with the server (tests/merge-cases.json, read by tests/run.cjs)
@@ -323,16 +343,17 @@ local function sold(tranches)
   for _, ks in pairs(tranches) do for _, v in pairs(ks) do units = units + v[1] end end
   return math.floor(units + 0.5)
 end
-local real = VepIndustriesMarketDB.comparisons[1] -- 2023 -> 2039, 919 s, 4227 units
+local real = VepIndustriesMarketDB.comparisons[1] -- 2023 -> 2039, 919 s, 4333 units
 local twin = { author = "Ami", start = real.start, finish = real.finish, items = real.items }
 local later = { author = "Ami", start = real.start + 600, finish = real.finish + 600, items = real.items }
-ok(sold(M.Merge({ real }, DAY0)) == 4227 and sold(M.Merge({ real, twin }, DAY0)) == 4227
+ok(sold(M.Merge({ real }, DAY0)) == 4333 and sold(M.Merge({ real, twin }, DAY0)) == 4333
   and sameTranches(M.Merge({ real, twin }, DAY0), M.Merge({ real }, DAY0)),
-  "fusion des scans reels : seul, 4227 unites ; meme Comparaison chez un ami, pas comptee deux fois")
+  "fusion des scans reels : seul, 4333 unites ; meme Comparaison chez un ami, pas comptee deux fois")
 -- 10 min later the friend's Comparison sits in the second Tranche only: the first keeps our share alone, the second
--- averages our share and all of the friend's units (same pair in tests/merge-cases.json, for the server)
+-- averages our share and all of the friend's units. The shared merge-cases.json keeps its historical Comparison
+-- (4 227 units, inferred before the undercut correction); the merge rule and wire format have not changed.
 local first = 1800 - (real.start - DAY0) % 1800
-local expect = 4227 * (first / 919 + ((919 - first) / 919 + 1) / 2)
+local expect = 4333 * (first / 919 + ((919 - first) / 919 + 1) / 2)
 ok(sold(M.Merge({ real, later }, DAY0)) == math.floor(expect + 0.5),
   string.format("fusion des scans reels : ami decale de 10 min, moyenne sur la Tranche commune (%.1f)", expect))
 -- the same pair as JSON, times from day 0: npm run merge-case writes it as the real case of tests/merge-cases.json

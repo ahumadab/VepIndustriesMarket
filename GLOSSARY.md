@@ -59,9 +59,18 @@ _Avoid_: Trend, évolution
 _Code_: `trend`
 
 **Ventes estimées**:
-Nombre d'unités d'un objet probablement achetées entre deux scans complets, déduit des enchères disparues avant leur expiration, en supposant que les acheteurs prennent les moins chères : on compte les unités disparues par prix unitaire, jusqu'au nouveau prix minimum ; une enchère plus chère qui disparaît est une annulation.
+Nombre d'unités d'un objet probablement achetées entre deux scans complets, déduit des enchères disparues avant leur expiration, en supposant que les acheteurs prennent les moins chères : on compte les unités disparues par prix unitaire, jusqu'au nouveau prix minimum.
+
+Si le prix minimum baisse, on considère aussi les disparitions à l'ancien minimum, après déduction de toutes les quantités apparues à d'autres prix (moins **ou** plus chers), qui pourraient être des remises en vente. On ne retient ce calcul que s'il dépasse le calcul habituel, sans additionner les deux. Les disparitions au-dessus des deux minimums restent ignorées. Exemple : 10 unités à 100 deviennent 4 à 100 et 2 à 90 → 4 ventes estimées, et non 0 ; 10 unités simplement déplacées à 90 → 0.
+
+Cela reste une estimation : sans identifiant d'enchère, un retrait au prix le plus bas peut ressembler à un achat. Des apports indépendants peuvent aussi masquer de vraies ventes. La règle s'applique aux nouvelles Comparaisons ; les anciennes ne sont pas recalculables sans leurs deux scans complets.
 _Avoid_: Sale rate, ventes, demande
 _Code_: `estimatedSales` (`estimatedSalesPerDay` ramené à un jour)
+
+**Valeur vendue par jour**:
+Or qui passe chaque jour sur un objet, tous vendeurs confondus : ventes estimées par jour × prix minimum actuel. Un seul chiffre comparable d'un objet à l'autre, pour savoir où va l'argent (un objet cher peu vendu peut peser moins qu'un objet bon marché très vendu).
+_Avoid_: Chiffre d'affaires, volume, CA
+_Code_: `goldPerDay` (cuivre)
 
 **Fiable**:
 Se dit des ventes estimées d'un objet quand au moins deux jours de la fenêtre ont une comparaison de scans complets (donc au moins trois scans) et qu'elles portent sur au moins une heure, et d'un jour quand il est dans la fenêtre d'un objet fiable. Non fiables, elles sont grisées et le verdict se fonde sur la tendance ; sous une heure comparée (sur la fenêtre, ou sur un jour), l'addon affiche « pas assez de scans » au lieu d'un nombre.

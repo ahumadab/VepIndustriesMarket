@@ -15,7 +15,11 @@ local TITLE = { 1.00, 0.82, 0.00 } -- tooltip label, the game's gold
 -- text only: muted (not reliable, day counts), bright (reliable values), a % change (neutral, good, bad), coins
 local TEXT = { muted = { 0.616, 0.616, 0.616 }, bright = { 1.00, 1.00, 1.00 }, neutral = { 0.80, 0.80, 0.80 },
     good = { 0.40, 1.00, 0.40 }, bad = { 1.00, 0.40, 0.40 } }
-local COIN = { g = { 1.00, 0.844, 0.00 }, s = { 0.781, 0.781, 0.812 }, c = { 0.93, 0.648, 0.373 } }
+local COIN_ICON = {
+    g = "|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t",
+    s = "|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t",
+    c = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t",
+}
 local function hex(c) return string.format("|cff%02x%02x%02x", math.floor(c[1] * 255), math.floor(c[2] * 255),
         math.floor(c[3] * 255)) end
 -- invert: for stock, more is bad for a seller (red)
@@ -33,8 +37,75 @@ local function perDayText(perDay)
         string.format("%d", math.floor(perDay + 0.5))
 end
 
--- r: a Market.Report
-function GM.TrendText(r)
+-- 8100000 copper -> "810<gold icon>", 4500 -> "45<silver icon>": an order of magnitude
+local function roughMoney(c)
+    if c >= 10000 then return string.format("%d", math.floor(c / 10000 + 0.5)) .. COIN_ICON.g end
+    return string.format("%d", math.floor(c / 100 + 0.5)) .. COIN_ICON.s
+end
+
+-- the estimated sales and gold per day alone, as in TrendText (tooltip, under the advice)
+function GM.SalesText(r)
+    local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
+    return c .. "≈ " .. perDayText(r.estimatedSalesPerDay or 0) .. "/jour|r"
+        .. (r.goldPerDay and c .. " · ≈ " .. roughMoney(r.goldPerDay) .. "/jour|r" or "")
+end
+
+-- 600 -> "< 1 h", 3 h -> "~3 h", 2 days -> "~2 j", beyond a week (or no sale measured) -> "> 7 j"
+local function sellDuration(s)
+    if s < 3600 then return "< 1 h" end
+    if s < 86400 then return string.format("~%d h", math.floor(s / 3600 + 0.5)) end
+    if s <= 7 * 86400 then return string.format("~%d j", math.floor(s / 86400 + 0.5)) end
+    return "> 7 j"
+end
+
+-- Time to sell from r.selling (Market.Report): the lowest price only (tooltip), or the three prices one per line,
+-- indented under "Vendu en :" (window, all); greyed while the estimated sales are not reliable. nil without it.
+function GM.SellText(r, all)
+    local s = r.selling
+    if not s then return nil end
+    local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
+    local function line(i) return GM.Money(s[i].price) .. c .. "  " .. sellDuration(s[i].seconds) .. "|r" end
+    if not all then return line(1) end
+    local lines = {}
+    for i = 1, #s do lines[i] = "    - " .. line(i) end
+    return table.concat(lines, "\n")
+end
+
+-- the longest a seller is advised to wait: a 12 h auction
+local ADVICE_WAIT = 12 * 3600
+
+-- One sentence for a player who doesn't read figures (r: a Market.Report): the verdict, the price to sell at (the
+-- highest of r.selling that sells within ADVICE_WAIT, else just under the lowest), how long it takes, and, while the
+-- estimated sales are not reliable, how many hours of scans it rests on.
+function GM.AdviceText(r)
+    local s = r.selling
+    if not s then return hex(TEXT.muted) .. "Pas encore assez de scans pour conseiller|r" end
+    local txt
+    if r.verdict == "saturated" then
+        local stock = 0
+        for _, t in ipairs(r.tiers or {}) do stock = stock + t.size * t.count end
+        local perDay = r.estimatedSalesPerDay or 0
+        txt = hex(COLOR.saturated) .. "Marché saturé|r : " .. (perDay > 0
+            and sellDuration(stock / perDay * 86400) .. " de stock devant toi, attends ou vends moins cher"
+            or "rien ne se vend, attends ou vends ailleurs")
+    else
+        local pick = s[1]
+        for i = 2, #s do if s[i].seconds <= ADVICE_WAIT then pick = s[i] end end
+        local head = r.verdict == "demand" and hex(COLOR.demand) .. "Bonne vente|r"
+            or r.verdict == "stable" and hex(COLOR.stable) .. "Vente correcte|r" or "À tester"
+        txt = head .. " : vends à " .. GM.Money(pick.price) .. ", parti en " .. sellDuration(pick.seconds)
+    end
+    if r.confidence ~= "high" then
+        txt = txt .. " " .. hex(TEXT.muted) .. string.format("(%d h de mesures, à confirmer)|r",
+            math.floor((r.estimatedSalesSeconds or 0) / 3600 + 0.5))
+    end
+    return txt
+end
+
+-- r: a Market.Report; sep: between the verdict and the estimated sales, "  " by default (tooltip), a line break in
+-- the window, too narrow for both on one line
+function GM.TrendText(r, sep)
+    sep = sep or "  "
     local v, trend = r.verdict, r.trend
     local txt = hex(COLOR[v]) .. LABEL[v] .. "|r"
     local sales = r.source == "sales"
@@ -46,10 +117,11 @@ function GM.TrendText(r)
     txt = txt .. string.format(" %s(%d j)|r", hex(TEXT.muted), (sales and r.estimatedSalesDays or trend.days) or 0)
     local perDay = r.estimatedSalesPerDay
     if r.scarce then -- a few minutes compared: "0/jour" would read as "does not sell"
-        txt = txt .. "  " .. hex(TEXT.muted) .. "pas assez de scans|r"
+        txt = txt .. sep .. hex(TEXT.muted) .. "pas assez de scans|r"
     elseif perDay then -- grey while not reliable
-        txt = txt .. "  " .. hex(r.confidence == "high" and TEXT.bright or TEXT.muted) .. "≈ " .. perDayText(perDay)
-            .. "/jour|r"
+        local c = hex(r.confidence == "high" and TEXT.bright or TEXT.muted)
+        txt = txt .. sep .. c .. "≈ " .. perDayText(perDay) .. "/jour|r"
+        if r.goldPerDay then txt = txt .. c .. " · ≈ " .. roughMoney(r.goldPerDay) .. "/jour|r" end
     end
     return txt
 end
@@ -57,7 +129,7 @@ end
 ---------------------------------------------------------------- window
 local W, H, SPAN = 340, 120, 21
 local f = CreateFrame("Frame", "VepIndustriesMarketTrendFrame", UIParent, "BackdropTemplate")
-f:SetSize(W + 30, H + 154)
+f:SetSize(W + 30, H + 238) -- fit() resizes it to its text
 f:SetPoint("CENTER", 300, 100)
 f:SetFrameStrata("DIALOG")
 f:SetBackdrop({
@@ -95,7 +167,7 @@ hintFS:SetPoint("BOTTOMLEFT", 14, 8)
 hintFS:SetText("Survole un objet.  /vim item <lien> pour figer, /vim unpin")
 
 local graph = CreateFrame("Frame", nil, f)
-graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -100)
+graph:SetSize(W, H); graph:SetPoint("TOPLEFT", 15, -184)
 local gbg = graph:CreateTexture(nil, "BACKGROUND"); gbg:SetAllPoints(); gbg:SetColorTexture(1, 1, 1, 0.04)
 local maxPFS = graph:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); maxPFS:SetPoint("BOTTOMLEFT", graph,
     "TOPLEFT", 0, 2)
@@ -159,17 +231,19 @@ local function hideAll()
     for _, t in ipairs(dots) do t:Hide() end
 end
 
--- 123456 -> "12|cffffd700g|r 34|cffc7c7cfs|r 56|cffeda55fc|r" (GetCoinTextureString is missing on Forever)
-local function money(c)
+-- 123456 -> "12<gold icon> 34<silver icon> 56<copper icon>": the game's coin icons, which Auctionator uses on Forever
+-- too (GetCoinTextureString is missing there); letters read as units of time next to "~2 h"
+function GM.Money(c)
     if not c then return "?" end
     c = math.floor(c)
     local g, s, cu = math.floor(c / 10000), math.floor(c / 100) % 100, c % 100
     local out = {}
-    if g > 0 then out[#out + 1] = g .. hex(COIN.g) .. "g|r" end
-    if s > 0 or g > 0 then out[#out + 1] = s .. hex(COIN.s) .. "s|r" end
-    if cu > 0 or #out == 0 then out[#out + 1] = cu .. hex(COIN.c) .. "c|r" end
+    if g > 0 then out[#out + 1] = g .. COIN_ICON.g end
+    if s > 0 or g > 0 then out[#out + 1] = s .. COIN_ICON.s end
+    if cu > 0 or #out == 0 then out[#out + 1] = cu .. COIN_ICON.c end
     return table.concat(out, " ")
 end
+local money = GM.Money
 
 -- hovering a day lists its values: view = { first = Auctionator day of column 1, hist = { [day] = entry }, daily }
 local view = { hist = {}, daily = {} }
@@ -207,6 +281,16 @@ for i = 1, SPAN do
 end
 
 local current, pinned
+-- the window to its text: as wide as the longest line (never under the graph's width), the graph centred just under
+-- the last line
+local function fit()
+    local w = math.max(W + 30, verdictFS:GetStringWidth() + 28)
+    local top = 52 + verdictFS:GetStringHeight() + 22
+    nameFS:SetWidth(w - 50)
+    graph:ClearAllPoints(); graph:SetPoint("TOP", f, "TOP", 0, -top)
+    f:SetSize(w, top + H + 54)
+end
+
 function GM.ShowItem(itemID, force)
     if not itemID then return end
     if pinned and not force then return end
@@ -222,12 +306,16 @@ function GM.ShowItem(itemID, force)
         verdictFS:SetText(hex(COLOR.none) .. "Aucune donnée Auctionator pour cet objet.|r")
         emptyFS:SetText("Fais un Full Scan à l'hôtel des ventes"); emptyFS:Show()
         maxPFS:SetText(""); maxSFS:SetText(""); maxSalesFS:SetText("")
+        fit()
         return
     end
     emptyFS:Hide()
     local last = hist[#hist]
-    verdictFS:SetText(GM.TrendText(r) .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
-        "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?"))
+    local sell = GM.SellText(r, true)
+    verdictFS:SetText(GM.AdviceText(r) .. "\n" .. GM.TrendText(r, "\n") .. "\n" .. hex(TEXT.bright) .. "Min actuel|r " .. money(last.price) ..
+        "  " .. hex(STOCK) .. "stock|r " .. (last.stock or "?")
+        .. (sell and "\n" .. hex(TEXT.bright) .. "Vendu en :|r\n" .. sell or ""))
+    fit()
 
     local pts, maxP, minP, maxS = {}, 0, math.huge, 0
     for _, e in ipairs(hist) do
@@ -300,8 +388,10 @@ local function onItemTooltip(tooltip, itemID)
     if VepIndustriesMarketDB and VepIndustriesMarketDB.tooltip == false then return end
     local r = M.Report(itemID)
     if #r.history > 0 or r.source == "sales" then
+        -- the advice first; with it, the sales figures alone (the trend's percentages stay in the /vim window)
+        tooltip:AddDoubleLine(hex(TITLE) .. "Conseil|r", GM.AdviceText(r))
         tooltip:AddDoubleLine(hex(TITLE) .. (r.source == "sales" and "Ventes estimées " or "Tendance ") .. M.WINDOW
-            .. " j|r", GM.TrendText(r))
+            .. " j|r", r.selling and GM.SalesText(r) or GM.TrendText(r))
     end
     if f:IsShown() and tooltip == GameTooltip then GM.ShowItem(itemID) end
 end
