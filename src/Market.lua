@@ -4,7 +4,8 @@
 -- sales merged by Tranche from the Comparisons) and comparisons = { { author, realm, faction, start, finish, items =
 -- "itemID sold stock price,..." }, ... } (the latest, ours and those received in game, see addComparison and
 -- tests/merge-cases.json), seen = { [M.Id] = finish } (every Comparison kept in the last KEEP_COMPARISONS, even one the
--- cap dropped since: not taken again from a friend), author = their author for the whole account.
+-- cap dropped since: not taken again from a friend), author = their author for the whole account, names = { [itemID] =
+-- name } (the English client's names, read in the full scans' item links, for the Sync script to send to the server).
 -- scripts/saved.mjs (npm run report, npm run fixture) parses these formats from the save: change it with them.
 local GM = VepIndustriesMarket
 local T = GM.Trend
@@ -14,8 +15,9 @@ local M = GM.Market
 M.WINDOW = T.WINDOW
 -- verdict from reliable estimated sales, by the days the current stock lasts at that pace: demand below DEMAND_DAYS,
 -- saturated above SATURATED_DAYS (stock left without any sale included), stable between.
--- ponytail: provisional, picked on one evening of scans (2026-11-21); calibrate with Boris on 3 days of scans (#7)
-M.DEMAND_DAYS, M.SATURATED_DAYS = 2, 7
+-- ponytail: chosen with Boris on 4 days of scans (2026-11-21..24, 7 h 47 compared, #7): demand = sells within one
+-- 24 h auction; saturated kept lenient while #50 undercounts big commodities. Recheck after a week of scans.
+M.DEMAND_DAYS, M.SATURATED_DAYS = 1, 7
 -- compared time over the window below which estimated sales are scarce: too little to tell, even "0 sold"
 M.MIN_SALES_SECONDS = 3600
 -- daily summary kept, the span of the /vim window: ~170 KB per day of scans, ~55 KB more with estimated sales,
@@ -308,7 +310,8 @@ end
 -- Returns true, nil, the seconds compared when it recorded a Comparison; otherwise false, the reason ("first": no
 -- stored scan, "otherHouse", "tooSoon": under MIN_GAP, "same": same data, "tooLate": over MAX_GAP) and the
 -- seconds since the stored scan (nil for "first" and "otherHouse"). nil when the scan is ignored (no auction).
-function M.Ingest(scan, now, realm, faction, author)
+-- names: { [itemID] = name } read in the scan's item links, optional; a name lives as long as its item's daily summary.
+function M.Ingest(scan, now, realm, faction, author, names)
     local db, day, day0 = VepIndustriesMarketDB, T.Today(now), T.Day0()
     if not db or not day then return end
     local items, stocks, done = {}, {}, 0
@@ -369,6 +372,15 @@ function M.Ingest(scan, now, realm, faction, author)
             if d <= day - KEEP_DAYS then days[d] = nil end
         end
         if next(days) == nil then daily[id] = nil end
+    end
+    -- ~30 bytes an item ([14047] = "Runecloth",): ~210 KB for the ~6 900 items of a real full scan, bounded by
+    -- the items of the daily summary (21 days)
+    db.names = db.names or {}
+    for id, name in pairs(names or {}) do
+        if items[id] then db.names[id] = name end
+    end
+    for id in pairs(db.names) do
+        if not daily[id] then db.names[id] = nil end
     end
     db.fullScan = { time = now, realm = realm, faction = faction, items = items }
     if gap then return true, nil, gap end

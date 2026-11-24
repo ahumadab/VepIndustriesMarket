@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "test": "node tests/run.cjs && node tests/sync.cjs",
+    "test": "node tests/run.cjs && node tests/report.test.mjs && node tests/sync.cjs",
     "merge-case": "node tests/run.cjs merge-case",
     "deploy": "node scripts/build.mjs deploy",
     "release": "node scripts/build.mjs release",

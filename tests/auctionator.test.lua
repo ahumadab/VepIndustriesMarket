@@ -11,14 +11,18 @@ ok(full and incremental and not lastSaid():find("réglé"), "branche sur les sca
 SlashCmdList.VEPINDUSTRIESMARKET("status")
 ok(lastSaid():find("Aucun Scan complet"), "/vim status sans scan : " .. lastSaid())
 
--- the reduced real scan, in the shape of Auctionator's ScanComplete data
+-- the reduced real scan, in the shape of Auctionator's ScanComplete data; item links as the English client gives them
+-- (the fixture holds no name: "Item <id>" stands for it)
 local data = {}
 for _, r in ipairs(FULLSCAN) do
   for _ = 1, r[5] do
-    data[#data + 1] = { replicateInfo = { [3] = r[2], [10] = r[3], [17] = r[1] }, itemLink = "|Hitem:" .. r[1] .. "|h",
-      timeLeft = r[4] }
+    data[#data + 1] = { replicateInfo = { [3] = r[2], [10] = r[3], [17] = r[1] },
+      itemLink = "|cffffffff|Hitem:" .. r[1] .. "::::::::60:::::::|h[Item " .. r[1] .. "]|h|r", timeLeft = r[4] }
   end
 end
+-- a real link of the English client, with a quote and an apostrophe; and a link without a name, ignored
+data[1].itemLink = "|cff1eff00|Hitem:" .. FULLSCAN[1][1] .. "::::::::60:::::::|h[Smith's \"Best\" Hammer]|h|r"
+data[#data + 1] = { replicateInfo = { [3] = 1, [10] = 100, [17] = 999999 }, itemLink = "|Hitem:999999|h", timeLeft = 4 }
 -- one game frame per queued timer, to see the scan spread over frames
 local nextFrame = {}
 C_Timer = { After = function(_, fn) nextFrame[#nextFrame + 1] = fn end }
@@ -60,21 +64,29 @@ ok(mixed[1] == 28 and mixed[3] == 108 and mixed[4] == 25 and not mixed[2], "pali
 local st = M.Status()
 local fullSize = st.bytes * FULLSCAN_TOTAL_ITEMS / FULLSCAN_ITEMS
 ok(st.realm == "PvE" and st.faction == "Horde", "scan rattache au royaume et a la faction")
-ok(st.items == FULLSCAN_ITEMS and fullSize < 1e6,
+ok(st.items == FULLSCAN_ITEMS + 1 and fullSize < 1e6,
   string.format("%d objets, %d Ko extrapoles a %d objets", st.items, math.floor(fullSize / 1000), FULLSCAN_TOTAL_ITEMS))
+local names, named = VepIndustriesMarketDB.names or {}, 0
+for _ in pairs(names) do named = named + 1 end
+ok(named == FULLSCAN_ITEMS and names[5500] == "Item 5500" and names[FULLSCAN[1][1]] == "Smith's \"Best\" Hammer"
+  and not names[999999], string.format("noms anglais lus dans les liens : %d objets nommes", named))
 SlashCmdList.VEPINDUSTRIESMARKET("status")
-ok(lastSaid():find(FULLSCAN_ITEMS .. " objets"), "/vim status : " .. lastSaid())
+ok(lastSaid():find(FULLSCAN_ITEMS + 1 .. " objets"), "/vim status : " .. lastSaid())
 
--- /vim relire: the same scan read again from the client's memory counts as a second scan of the day
+-- /vim relire: the same scan read again from the client's memory counts as a second scan of the day, names included
+VepIndustriesMarketDB.names = nil
 C_AuctionHouse = {
   GetNumReplicateItems = function() return #data end,
   GetReplicateItemInfo = function(i) return table.unpack(data[i + 1].replicateInfo, 1, 17) end,
+  GetReplicateItemLink = function(i) return data[i + 1].itemLink end,
   GetReplicateItemTimeLeft = function(i) return data[i + 1].timeLeft end,
 }
 SlashCmdList.VEPINDUSTRIESMARKET("relire"); runFrames()
 local again = M.Report(5500)
-ok(lastSaid():find(FULLSCAN_ITEMS .. " objets, identique au précédent") and #again.tiers == 389 and again.daily[TODAY].scans == 2
-  and again.daily[TODAY].stock == 1517, "/vim relire : scan en memoire enregistre, 2 scans dans la journee")
+ok(lastSaid():find(FULLSCAN_ITEMS + 1 .. " objets, identique au précédent") and #again.tiers == 389
+  and again.daily[TODAY].scans == 2 and again.daily[TODAY].stock == 1517
+  and (VepIndustriesMarketDB.names or {})[5500] == "Item 5500",
+  "/vim relire : scan en memoire enregistre, 2 scans dans la journee, noms repris")
 C_AuctionHouse.GetNumReplicateItems = function() return 0 end
 SlashCmdList.VEPINDUSTRIESMARKET("relire")
 ok(lastSaid():find("aucun Scan complet en mémoire"), "/vim relire sans scan en memoire")

@@ -1,5 +1,19 @@
 # Changelog technique — VepIndustries Market
 
+## Unreleased
+
+### Noms des objets — #63
+
+- `Capture.lua` lit le nom de chaque objet dans le lien d'objet du Scan complet (`|h[Runecloth]|h`, client anglais), y compris par `/vim relire` (`C_AuctionHouse.GetReplicateItemLink`). Noms vides ou de plus de 120 caractères ignorés.
+- `Market.Ingest(scan, now, realm, faction, author, names)` garde `VepIndustriesMarketDB.names = { [itemID] = nom }` pour les objets du scan, et retire un nom avec le Résumé journalier de son objet (21 jours). Taille : ~30 octets par objet, ~200 Ko pour les ~6 900 objets d'un vrai Scan complet, à côté de ~1,75 Mo de sauvegarde actuelle.
+- `Sync.ps1` envoie, après les Comparaisons, les noms pas encore envoyés à `POST /v1/item-names` (en-tête `Sync-Code`, `{ names: [{ itemId, name }] }`, 500 par requête), retenus dans `%LOCALAPPDATA%\VepIndustriesMarket\names.txt` (`itemID<tab>nom`). Première erreur : arrêt des noms pour ce passage, ligne dans `sync.log`, Comparaisons et `Data.lua` inchangés, code de sortie 0 ; les noms restants repartent au passage suivant qui trouve une nouvelle sauvegarde (pas d'appel toutes les 15 min tant que la route manque en production).
+- Protocole des Comparaisons, `Data.lua` et échange en jeu inchangés.
+
+### Rapport par jour — #7
+
+- `npm run report` affiche, pour chaque jour du Résumé journalier de la sauvegarde puis de `Data.lua` : objets comparés, durée couverte (la plus longue d'un objet), épuisés, quantiles du rapport ventes estimées par jour / stock du jour et répartition en jours de stock (< 1 j, 1-2 j, 2-4 j, 4-7 j, 7-14 j, > 14 j, aucune vente). Code dans `scripts/daily.mjs`, tests dans `tests/report.test.mjs` (ajouté à `npm test`).
+- Seuils du Verdict choisis avec Boris sur 4 jours de scans (#7) : `DEMAND_DAYS` passe de 2 à 1 (Demande = le stock part en moins d'une journée), `SATURATED_DAYS` reste 7. À revoir après une semaine de scans et la correction de #50.
+
 ## 0.4.0 — 2026-11-23
 
 Différence fonctionnelle depuis `v0.3.0`. PR intégrées : #58, #59, #60 et #61.

@@ -1,5 +1,15 @@
 # Changelog public — VepIndustries Market
 
+## Unreleased
+
+### Nouveautés
+
+- **Les noms des objets partent vers le site** : l'addon note le nom (anglais) des objets vus pendant les scans de l'hôtel des ventes, et la synchronisation les envoie avec tes mesures. Le site pourra afficher « Runecloth » plutôt qu'un numéro. Rien à faire de ton côté, et la sauvegarde de l'addon ne grossit que d'environ 200 Ko.
+
+### Changement
+
+- **« Demande » est plus exigeant** : un objet n'est en Demande que si tout le stock de l'hôtel des ventes part en moins d'une journée au rythme mesuré, donc si ton enchère a de bonnes chances de partir avant d'expirer. Avant, la moitié des objets étaient en Demande. « Saturé » ne change pas (plus d'une semaine de stock).
+
 ## 0.4.0 — 23 novembre 2026
 
 L'addon aide maintenant à choisir **à quel prix vendre**, et pas seulement à voir si un objet est demandé.

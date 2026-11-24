@@ -4,11 +4,14 @@
 //                   once, the save's Comparisons to tests/fixtures/comparisons.lua, which tests/sync.cjs reads.
 // npm run report  : what the addon recorded since the previous save: estimated sales, the items selling most with
 //                   their stock and lowest price moves between the two saved scans, errors, the data file loaded,
-//                   the Comparisons kept by author, and a reminder to capture the Comparisons fixture while the save holds Comparisons.
+//                   the Comparisons kept by author, and a reminder to capture the Comparisons fixture while the save holds Comparisons;
+//                   then, for each day of the daily summary (the save's, and the data file's when there is one), the
+//                   items compared, the time covered and the spread of estimated sales per day over stock (#7).
 // Game folder: env WOW_ADDONS, as for deploy; the first account holding VepIndustriesMarket.lua is read.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { dailyReport, formatDailyReport, readDataDaily, readSaveDaily } from './daily.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const mode = process.argv[2];
@@ -103,6 +106,12 @@ if (mode === 'fixture') {
     + `${df.items} objets` : 'Fichier de données : aucun chargé (hôtel des ventes pas ouvert, ou Data.lua absent)');
   const authors = Object.entries(current.authors).map(([a, n]) => `${a} ${n}`).join(', ');
   console.log(`Comparaisons gardées par auteur (les autres reçues en jeu) : ${authors || 'aucune'}`);
+  const dataFile = join(addons, 'VepIndustriesMarket_Data', 'Data.lua');
+  for (const line of formatDailyReport(dailyReport(readSaveDaily(readFileSync(saved, 'utf8'))))) console.log(line);
+  if (existsSync(dataFile)) {
+    const rows = dailyReport(readDataDaily(readFileSync(dataFile, 'utf8')));
+    for (const line of formatDailyReport(rows, 'du fichier de données (tous les joueurs)')) console.log(line);
+  }
   if (current.comparisons && !existsSync(join(root, 'tests/fixtures/comparisons.lua'))) {
     console.log(`! ${current.comparisons} Comparaisons dans la sauvegarde, pas de tests/fixtures/comparisons.lua : `
       + 'npm run fixture maintenant (l\'addon les retire au bout de 24 h)');

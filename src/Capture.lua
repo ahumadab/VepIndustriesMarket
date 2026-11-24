@@ -15,14 +15,21 @@ end
 -- replicateInfo[3] = lot size, [10] = buyout of the whole lot, [17] = itemID. Bid-only auctions (no buyout) are skipped.
 -- timeLeft is kept as the API gives it: 1 (Short) to 4 (Very long) on Forever over the real scan of 2026-11-21.
 -- A tier is split by time left, so that estimated sales can tell its Short auctions apart.
--- get(k) -> replicateInfo, timeLeft of auction k (1..n). Pauses every BATCH auctions (see ingest).
+-- get(k) -> replicateInfo, timeLeft, item link of auction k (1..n). Pauses every BATCH auctions (see ingest).
+-- Returns the full scan and the items' names, read in their links: "|h[Runecloth]|h", in the client's language.
 local BATCH = 2000
+-- the server's longest name (POST /v1/item-names)
+local NAME_MAX = 120
 local function toFullScan(n, get)
-    local scan, byKey = {}, {}
+    local scan, byKey, names = {}, {}, {}
     for k = 1, n do
-        local info, timeLeft = get(k)
+        local info, timeLeft, link = get(k)
         timeLeft = timeLeft or 0
         local id, size, buyout = info[17], info[3], info[10]
+        if id and not names[id] and type(link) == "string" then
+            local name = link:match("|h%[(.-)%]|h")
+            if name and name ~= "" and #name <= NAME_MAX then names[id] = name end
+        end
         if id and size and size > 0 and buyout and buyout > 0 then
             local price = math.floor(buyout / size + 0.5)
             local key = id .. ":" .. price .. ":" .. size .. ":" .. timeLeft
@@ -37,7 +44,7 @@ local function toFullScan(n, get)
         end
         if k % BATCH == 0 then coroutine.yield() end
     end
-    return scan
+    return scan, names
 end
 
 local SETUP = "les Ventes estimées demandent un Scan complet à l'ouverture de l'hôtel des ventes. Dans les options "
@@ -91,8 +98,9 @@ local function ingest(n, get)
     end
     GM.Say(string.format("enregistrement du Scan complet en cours (%d enchères)…", n))
     GM.Run("scan", function()
-        local compared, reason, seconds = M.Ingest(toFullScan(n, get), time(), GetRealmName(),
-            UnitFactionGroup("player"), UnitName("player"))
+        local scan, names = toFullScan(n, get)
+        local compared, reason, seconds = M.Ingest(scan, time(), GetRealmName(), UnitFactionGroup("player"),
+            UnitName("player"), names)
         if compared == nil then return GM.Say("Scan complet vide : ignoré.") end
         GM.Say(outcome(compared, reason, seconds))
         if compared then GM.Exchange.Announce() end
@@ -104,7 +112,7 @@ local listener = {}
 function listener:ReceiveEvent(event, data)
     if event == Auctionator.FullScan.Events.ScanComplete then
         data = type(data) == "table" and data or {}
-        ingest(#data, function(k) return data[k].replicateInfo, data[k].timeLeft end)
+        ingest(#data, function(k) return data[k].replicateInfo, data[k].timeLeft, data[k].itemLink end)
     elseif not warned then
         warned = true
         GM.Say("Auctionator a fait un scan incrémental : " .. SETUP)
@@ -119,7 +127,8 @@ function GM.Reread()
         return GM.Say("aucun Scan complet en mémoire (il est perdu à chaque /reload) : ouvre l'hôtel des ventes et attends un scan d'Auctionator.")
     end
     ingest(n, function(k) -- the replicate API is 0-based
-        return { AH.GetReplicateItemInfo(k - 1) }, AH.GetReplicateItemTimeLeft(k - 1)
+        return { AH.GetReplicateItemInfo(k - 1) }, AH.GetReplicateItemTimeLeft(k - 1),
+            AH.GetReplicateItemLink and AH.GetReplicateItemLink(k - 1)
     end)
 end
 
