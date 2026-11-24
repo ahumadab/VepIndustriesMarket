@@ -54,7 +54,8 @@ Auctionator = auctionator
 
 -- full scans: only the latest is kept, the daily summary counts every scan of the day
 VepIndustriesMarketDB = {}
-M.Ingest({ [900] = { tier(300, 1, 1, 3), tier(120, 20, 2, 2) }, [901] = { tier(5, 1, 1, 1) } }, time() - 60)
+M.Ingest({ [900] = { tier(300, 1, 1, 3), tier(120, 20, 2, 2) }, [901] = { tier(5, 1, 1, 1) } }, time() - 60, nil, nil,
+  nil, { [900] = "Runecloth", [901] = "Linen Cloth", [903] = "Not listed" })
 M.Ingest({ [900] = { tier(150, 5, 1, 4), tier(130, 1, 2, 3), tier(130, 1, 3, 1), tier(130, 200, 1, 3) },
   [902] = {} }, time())
 local scanned = M.Report(900)
@@ -67,8 +68,12 @@ ok(d and d.scans == 2 and d.price == 120 and d.stock == 210, "resume journalier 
 ok(#M.Report(902).tiers == 0 and M.Report(902).daily[TODAY] == nil, "objet sans palier ignore")
 ok(#M.Report(901).tiers == 0 and M.Report(901).daily[TODAY].scans == 1, "objet absent du dernier scan : pas de palier")
 ok(scanned.estimatedSalesPerDay == nil, "pas encore de ventes estimees")
+local names = VepIndustriesMarketDB.names
+ok(names[900] == "Runecloth" and names[901] == "Linen Cloth" and names[903] == nil, "noms des objets du scan gardes")
 M.Ingest({ [900] = { tier(99, 1, 1, 3) } }, time() + 30 * 86400)
 ok(M.Report(900).daily[TODAY] == nil and M.Report(900).daily[TODAY + 30].scans == 1, "resume journalier limite a 21 jours")
+names = VepIndustriesMarketDB.names
+ok(names[900] == "Runecloth" and names[901] == nil, "nom retire avec le resume journalier de son objet")
 local status = M.Status()
 ok(status.items == 1 and status.time == time() + 30 * 86400 and status.bytes > 0, "etat du dernier scan")
 VepIndustriesMarketDB = nil
