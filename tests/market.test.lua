@@ -290,10 +290,12 @@ local function twoDays(before, after) -- one comparison of 1 h yesterday, one to
   M.Ingest(before, t2, "PvE", "Horde", "Boris"); M.Ingest(after, t2 + 3600, "PvE", "Horde", "Boris")
 end
 twoDays({ [14048] = { tier(100, 1, 30, 3) }, [930] = { tier(100, 1, 101, 3) }, [931] = { tier(100, 1, 50, 3) },
-    [932] = { tier(100, 1, 2, 3) } },
-  { [14048] = { tier(100, 1, 29, 3) }, [930] = { tier(100, 1, 100, 3) }, [931] = { tier(100, 1, 50, 3) } })
+    [932] = { tier(100, 1, 2, 3) }, [933] = { tier(100, 1, 20, 3) } },
+  { [14048] = { tier(100, 1, 29, 3) }, [930] = { tier(100, 1, 100, 3) }, [931] = { tier(100, 1, 50, 3) },
+    [933] = { tier(100, 1, 19, 3) } })
 local function bySales(id) local res = M.Report(id); return res.source == "sales" and res.confidence == "high" and res.verdict end
-ok(bySales(14048) == "demand", "ventes fiables : 24/jour pour 29 en stock (1,2 j) -> demande, malgre la tendance saturee")
+ok(bySales(14048) == "stable", "ventes fiables : 24/jour pour 29 en stock (1,2 j) -> stable, plus d'un jour de stock")
+ok(bySales(933) == "demand", "ventes fiables : 24/jour pour 19 en stock (0,8 j) -> demande, part avant la fin d'une enchere de 24 h")
 ok(bySales(930) == "stable", "ventes fiables : 24/jour pour 100 en stock (4,2 j) -> stable")
 ok(bySales(931) == "saturated", "ventes fiables : aucune vente, 50 en stock -> sature")
 ok(bySales(932) == "demand", "ventes fiables : objet epuise -> demande")

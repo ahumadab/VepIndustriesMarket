@@ -15,8 +15,9 @@ local M = GM.Market
 M.WINDOW = T.WINDOW
 -- verdict from reliable estimated sales, by the days the current stock lasts at that pace: demand below DEMAND_DAYS,
 -- saturated above SATURATED_DAYS (stock left without any sale included), stable between.
--- ponytail: provisional, picked on one evening of scans (2026-11-21); calibrate with Boris on 3 days of scans (#7)
-M.DEMAND_DAYS, M.SATURATED_DAYS = 2, 7
+-- ponytail: chosen with Boris on 4 days of scans (2026-11-21..24, 7 h 47 compared, #7): demand = sells within one
+-- 24 h auction; saturated kept lenient while #50 undercounts big commodities. Recheck after a week of scans.
+M.DEMAND_DAYS, M.SATURATED_DAYS = 1, 7
 -- compared time over the window below which estimated sales are scarce: too little to tell, even "0 sold"
 M.MIN_SALES_SECONDS = 3600
 -- daily summary kept, the span of the /vim window: ~170 KB per day of scans, ~55 KB more with estimated sales,

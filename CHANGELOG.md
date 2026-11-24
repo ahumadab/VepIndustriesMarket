@@ -12,7 +12,7 @@
 ### Rapport par jour — #7
 
 - `npm run report` affiche, pour chaque jour du Résumé journalier de la sauvegarde puis de `Data.lua` : objets comparés, durée couverte (la plus longue d'un objet), épuisés, quantiles du rapport ventes estimées par jour / stock du jour et répartition en jours de stock (< 1 j, 1-2 j, 2-4 j, 4-7 j, 7-14 j, > 14 j, aucune vente). Code dans `scripts/daily.mjs`, tests dans `tests/report.test.mjs` (ajouté à `npm test`).
-- Les seuils du Verdict (`DEMAND_DAYS` = 2, `SATURATED_DAYS` = 7) ne changent pas : proposition chiffrée dans #7, à choisir avec Boris.
+- Seuils du Verdict choisis avec Boris sur 4 jours de scans (#7) : `DEMAND_DAYS` passe de 2 à 1 (Demande = le stock part en moins d'une journée), `SATURATED_DAYS` reste 7. À revoir après une semaine de scans et la correction de #50.
 
 ## 0.4.0 — 2026-11-23
 
