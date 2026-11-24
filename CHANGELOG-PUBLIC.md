@@ -1,5 +1,11 @@
 # Changelog public — VepIndustries Market
 
+## Unreleased
+
+### Nouveautés
+
+- **Les noms des objets partent vers le site** : l'addon note le nom (anglais) des objets vus pendant les scans de l'hôtel des ventes, et la synchronisation les envoie avec tes mesures. Le site pourra afficher « Runecloth » plutôt qu'un numéro. Rien à faire de ton côté, et la sauvegarde de l'addon ne grossit que d'environ 200 Ko.
+
 ## 0.4.0 — 23 novembre 2026
 
 L'addon aide maintenant à choisir **à quel prix vendre**, et pas seulement à voir si un objet est demandé.
