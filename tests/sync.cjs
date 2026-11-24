@@ -31,9 +31,15 @@ copyFileSync(join(__dirname, '..', 'src', 'Sync.ps1'), join(addon, 'Sync.ps1'));
 // CRLF, each entry also closes on a `-- [n]` comment, as some clients write them.
 const real = JSON.parse(readFileSync(join(__dirname, 'merge-cases.json'), 'utf8')).cases.at(-1).comparisons[0].items;
 const comparison = (author, start) => ({ author, realm: '', faction: 'Horde', start, finish: start + 919, items: real });
+// Item names (Market.lua's names), as the game escapes them in a Lua string: { itemId, name } once read
+const itemNames = (from, n) => [...Array(n)].map((_, i) => ({ itemId: from + i, name: `Item ${from + i}` }));
+const luaString = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+let names = [{ itemId: 14047, name: 'Runecloth' }, { itemId: 5956, name: 'Blacksmith\'s "Best" Hammer' },
+  { itemId: 2589, name: 'Crème de Linen' }, ...itemNames(100000, 600)];
 const save = (comparisons, eol = '\n') => [
   '', 'VepIndustriesMarketDB = {', '["daily"] = {', '[15347] = {', '[2516] = "1100 22 10 0 7970",', '},', '},',
-  '["author"] = "Vép",', '["comparisons"] = {',
+  '["author"] = "Vép",', '["names"] = {', ...names.map((n) => `[${n.itemId}] = ${luaString(n.name)},`), '},',
+  '["comparisons"] = {',
   ...comparisons.flatMap((c, i) => ['{', `["start"] = ${c.start},`, `["faction"] = "${c.faction}",`,
     `["items"] = "${c.items}",`, `["realm"] = "${c.realm}",`, `["author"] = "${c.author}",`,
     `["finish"] = ${c.finish},`, eol === '\n' ? '},' : `}, -- [${i + 1}]`]),
@@ -49,9 +55,10 @@ const writeSave = (comparisons, eol) => {
   utimesSync(saved, t, t);
 };
 
-// Fake server: Sync-Code checked, comparisons answered 204 (500 while failing), addon data answered with a Lua file.
+// Fake server: Sync-Code checked, comparisons answered 204 (500 while failing), item names { saved } (404 while the
+// route is missing, as in production before vepindustries-api ships it), addon data answered with a Lua file.
 const DATA = 'VepIndustriesMarketData = {\ngenerated = 1795350000,\ncounted = {\n["Vép"] = { [1795340000] = true },\n},\n}\n';
-let requests = [], failing = false;
+let requests = [], failing = false, namesMissing = false;
 const server = createServer((req, res) => {
   const chunks = [];
   req.on('data', (c) => chunks.push(c));
@@ -60,7 +67,9 @@ const server = createServer((req, res) => {
     requests.push({ method: req.method, url: req.url, code: req.headers['sync-code'], body: body && JSON.parse(body) });
     if (req.headers['sync-code'] !== CODE) res.writeHead(401).end();
     else if (req.method === 'POST' && req.url === '/v1/comparisons') res.writeHead(failing ? 500 : 204).end();
-    else if (req.method === 'GET' && req.url.startsWith('/v1/addon-data?')) {
+    else if (req.method === 'POST' && req.url === '/v1/item-names' && !namesMissing) {
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ saved: JSON.parse(body).names.length }));
+    } else if (req.method === 'GET' && req.url.startsWith('/v1/addon-data?')) {
       res.writeHead(200, { 'content-type': 'text/plain' }).end(DATA);
     } else res.writeHead(404).end();
   });
@@ -77,7 +86,11 @@ const ps = (command) => new Promise((resolve) => {
 });
 const task = () => ps(`$t = Get-ScheduledTask -TaskName ${TASK} -ErrorAction SilentlyContinue; `
   + 'if ($t) { "$($t.Principal.LogonType) $($t.Principal.RunLevel)" }');
-const posted = () => requests.filter((r) => r.method === 'POST').map((r) => r.body.comparisons);
+const posted = () => requests.filter((r) => r.url === '/v1/comparisons').map((r) => r.body.comparisons);
+const named = () => requests.filter((r) => r.url === '/v1/item-names').map((r) => r.body.names);
+const byId = (list) => [...list].sort((a, b) => a.itemId - b.itemId);
+// longer than the server takes (120): never sent, it would fail its whole batch at every run
+const TOO_LONG = { itemId: 7, name: 'x'.repeat(121) };
 const step = (name) => { console.log(`  ${name}`); requests = []; };
 
 async function main() {
@@ -99,13 +112,20 @@ async function main() {
   const again = await install();
   assert.ok(again.ok, again.out);
 
-  step('premier passage : Comparaisons envoyées par lots de 5, fichier de données écrit');
+  step('premier passage : Comparaisons envoyées par lots de 5, puis noms par lots de 500, fichier de données écrit');
+  const valid = names;
+  names = [...valid, TOO_LONG];
   writeSave(first);
   const firstRun = await sync();
   assert.ok(firstRun.ok, firstRun.out);
   const batches = posted();
   assert.deepEqual(batches.map((b) => b.length), [5, 2]);
   assert.deepEqual(batches.flat(), first);
+  assert.deepEqual(named().map((b) => b.length), [500, 103]);
+  assert.deepEqual(byId(named().flat()), byId(valid));
+  const order = requests.map((r) => r.url.split('?')[0]);
+  assert.ok(order.lastIndexOf('/v1/comparisons') < order.indexOf('/v1/item-names')
+    && order.lastIndexOf('/v1/item-names') < order.indexOf('/v1/addon-data'), order.join(' '));
   assert.ok(requests.every((r) => r.code === CODE));
   const dayZero = new Date(2020, 0, 1).getTime() / 1000;
   assert.deepEqual(requests.filter((r) => r.method === 'GET').map((r) => r.url),
@@ -115,6 +135,33 @@ async function main() {
   step('sauvegarde inchangée : rien envoyé');
   assert.ok((await sync()).ok);
   assert.deepEqual(requests, []);
+
+  step('noms : route absente (404), Comparaisons et fichier de données quand même, un seul essai, noté');
+  const more = itemNames(200000, 501);
+  names = [...valid, ...more];
+  const late = comparison('Vép', T0 + 7000);
+  writeSave([...first, late]);
+  namesMissing = true;
+  const dataBefore = statSync(data).mtimeMs;
+  const missing = await sync();
+  assert.ok(missing.ok, missing.out);
+  assert.deepEqual(posted(), [[late]]);
+  assert.equal(named().length, 1);
+  assert.ok(statSync(data).mtimeMs > dataBefore, 'fichier de données pas écrit');
+  assert.match(readFileSync(join(state, 'sync.log'), 'utf8'), /noms.*404/);
+
+  step('noms : sauvegarde suivante, seuls ceux pas encore envoyés repartent');
+  namesMissing = false;
+  requests = [];
+  writeSave([...first, late]);
+  assert.ok((await sync()).ok);
+  assert.deepEqual(posted(), []);
+  assert.deepEqual(named().map((b) => b.length), [500, 1]);
+  assert.deepEqual(byId(named().flat()), byId(more));
+  requests = [];
+  writeSave([...first, late]);
+  assert.ok((await sync()).ok);
+  assert.deepEqual(named(), []);
 
   step('envoi idempotent : seule la nouvelle Comparaison part, réessayée après un échec du serveur');
   const added = comparison('Vép', T0 + 6000);

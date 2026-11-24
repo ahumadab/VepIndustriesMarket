@@ -1,9 +1,10 @@
 ﻿# Sync script (GLOSSARY.md): links the game's save to the VPS, run by a scheduled task every 15 minutes of the
 # Windows session. Windows PowerShell 5.1; it never downloads code.
 #   Sync.ps1 -Install : asks the friend's invitation code (Sync code) once, then creates the scheduled task, no admin.
-#   Sync.ps1          : when a save changed, sends its new Comparisons and writes the addon's data file, Data.lua of
-#                       the addon VepIndustriesMarket_Data, which the addon loads when the auction house opens.
-# Lives in <game>/Interface/AddOns/VepIndustriesMarket; its state (code, sent Comparisons, log) in
+#   Sync.ps1          : when a save changed, sends its new Comparisons, then the item names not sent yet, and writes
+#                       the addon's data file, Data.lua of the addon VepIndustriesMarket_Data, which the addon loads
+#                       when the auction house opens.
+# Lives in <game>/Interface/AddOns/VepIndustriesMarket; its state (code, sent Comparisons and names, log) in
 # %LOCALAPPDATA%\VepIndustriesMarket, which outlives the addon's updates.
 param(
     [switch]$Install,
@@ -20,9 +21,12 @@ $data = Join-Path (Split-Path $PSScriptRoot) 'VepIndustriesMarket_Data\Data.lua'
 $state = Join-Path $env:LOCALAPPDATA 'VepIndustriesMarket'
 $config = Join-Path $state 'config.json'
 $sent = Join-Path $state 'sent.txt'
+$namesSent = Join-Path $state 'names.txt'
 $log = Join-Path $state 'sync.log'
 $utf8 = New-Object Text.UTF8Encoding $false
 $BATCH = 5 # the API takes 1 MiB per request, a real Comparison weighs ~125 KB
+$NAMES_BATCH = 500 # POST /v1/item-names takes 500 names at most, of 1 to 120 characters
+$NAME_MAX = 120
 $IDLE_DAYS = 30
 
 function Write-Log($message) {
@@ -63,6 +67,37 @@ function Read-Comparisons($text) {
         [ordered]@{ author = $c.author; realm = $c.realm; faction = $c.faction; start = $c.start; finish = $c.finish
             items = $c.items }
     }
+}
+
+# The item names of a save (Market.lua's names), one [itemID] = "name" per line; those the server would refuse skipped.
+function Read-Names($text) {
+    $block = [regex]::Match($text, '\["names"\] = \{\r?\n((?:\[\d+\] = "(?:[^"\\]|\\.)*",?[^\r\n]*\r?\n)*)\}')
+    foreach ($entry in [regex]::Matches($block.Groups[1].Value, '\[(\d+)\] = "((?:[^"\\]|\\.)*)"')) {
+        $name = $entry.Groups[2].Value -replace '\\(.)', '$1'
+        $id = [long]$entry.Groups[1].Value
+        if ($id -gt 0 -and $name.Length -ge 1 -and $name.Length -le $NAME_MAX) { [ordered]@{ itemId = $id; name = $name } }
+    }
+}
+
+# Sends the names not sent yet (names.txt: "itemID<tab>name" per line), by NAMES_BATCH. Stops at the first error,
+# logged, without failing the run: the server may not know the route yet (404), and the Comparisons matter more. The
+# names left go at the next run that finds a new save. Returns the number sent.
+function Send-Names($cfg, $code, $texts) {
+    $done = @{}
+    if (Test-Path $namesSent) { foreach ($line in [IO.File]::ReadAllLines($namesSent, $utf8)) { $done[$line] = $true } }
+    $names = @{}
+    foreach ($text in $texts) { foreach ($n in Read-Names $text) { $names[$n.itemId] = $n } }
+    $new = @($names.Values | Where-Object { !$done["$($_.itemId)`t$($_.name)"] })
+    $count = 0
+    try {
+        for ($i = 0; $i -lt $new.Count; $i += $NAMES_BATCH) {
+            $batch = @($new[$i..($i + $NAMES_BATCH - 1)])
+            Invoke-Api $cfg.api $code 'POST' '/v1/item-names' @{ names = $batch }
+            [IO.File]::AppendAllLines($namesSent, [string[]]@($batch | ForEach-Object { "$($_.itemId)`t$($_.name)" }), $utf8)
+            $count += $batch.Count
+        }
+    } catch { Write-Log "noms d'objets : $($new.Count - $count) non envoyé(s), réessayés à la prochaine sauvegarde : $_" }
+    $count
 }
 
 # The code of config.json, encrypted for the Windows user (DPAPI); PSCredential only decrypts it, its name is unused.
@@ -113,18 +148,20 @@ try {
     $latest = $saves | Sort-Object LastWriteTime | Select-Object -Last 1
     $done = @{}
     if (Test-Path $sent) { foreach ($key in [IO.File]::ReadAllLines($sent, $utf8)) { $done[$key] = $true } }
-    $all = @(foreach ($save in $saves) { Read-Comparisons ([IO.File]::ReadAllText($save.FullName, $utf8)) })
+    $texts = @(foreach ($save in $saves) { [IO.File]::ReadAllText($save.FullName, $utf8) })
+    $all = @(foreach ($text in $texts) { Read-Comparisons $text })
     $new = @($all | Where-Object { !$done["$($_.author)`t$($_.start)"] })
     for ($i = 0; $i -lt $new.Count; $i += $BATCH) {
         Invoke-Api $cfg.api $code 'POST' '/v1/comparisons' @{ comparisons = @($new[$i..($i + $BATCH - 1)]) }
     }
     [IO.File]::WriteAllLines($sent, [string[]]@($all | ForEach-Object { "$($_.author)`t$($_.start)" }), $utf8)
+    $named = Send-Names $cfg $code $texts
 
     # The data file of the auction house last scanned. Its full scan's table holds no other realm or faction key, and
     # its items no string key: the first ones after it are its own, whatever the order the game wrote them in.
     $text = [IO.File]::ReadAllText($latest.FullName, $utf8)
     $at = $text.IndexOf('["fullScan"] = {')
-    if ($at -lt 0) { Write-Log "$($new.Count) Comparaison(s) envoyée(s), aucun Scan complet : pas de fichier de données"; return }
+    if ($at -lt 0) { Write-Log "$($new.Count) Comparaison(s) et $named nom(s) envoyé(s), aucun Scan complet : pas de fichier de données"; return }
     $realm = ([regex]'\["realm"\] = "((?:[^"\\]|\\.)*)"').Match($text, $at).Groups[1].Value -replace '\\(.)', '$1'
     $faction = ([regex]'\["faction"\] = "(\w+)"').Match($text, $at).Groups[1].Value
     $dayZero = ([DateTimeOffset][datetime]'2020-01-01').ToUnixTimeSeconds() # Auctionator's day 0, local midnight
@@ -133,7 +170,7 @@ try {
     Move-Item "$data.tmp" $data -Force
     # dated as the save it answers: one the game writes during this run stays newer, for the next run
     (Get-Item $data).LastWriteTime = $latest.LastWriteTime
-    Write-Log "$($new.Count) Comparaison(s) envoyée(s), fichier de données écrit"
+    Write-Log "$($new.Count) Comparaison(s) et $named nom(s) envoyé(s), fichier de données écrit"
 } catch {
     Write-Log "erreur : $_"
     exit 1
